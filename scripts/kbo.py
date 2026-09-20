@@ -7,6 +7,7 @@ GitHub Actions 가 빠르고, 패키지 변화로 깨질 일도 없다.
 
 import csv
 import os
+import re
 import ssl
 import sys
 import time
@@ -25,6 +26,15 @@ DATA_DIR = os.path.join(ROOT, "data")
 
 BASE = "https://www.koreabaseball.com"
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36"
+
+
+def mask_url(url):
+    """에러 메시지에 URL 을 실을 때 인증값을 가린다.
+
+    기상청 API 는 인증키를 쿼리로 받는다. 실패했을 때 URL 을 그대로 예외에
+    넣으면 그 키가 Actions 로그와 터미널에 남는다.
+    """
+    return re.sub(r"((?:auth[Kk]ey|serviceKey|api[_-]?key|token)=)[^&\s]+", r"\1***", url)
 
 
 def http(url, data=None, headers=None, retries=3, timeout=45):
@@ -47,7 +57,7 @@ def http(url, data=None, headers=None, retries=3, timeout=45):
             last = exc
             if attempt < retries - 1:
                 time.sleep(2 * (attempt + 1))
-    raise RuntimeError("요청 실패: %s (%s)" % (url, last))
+    raise RuntimeError("요청 실패: %s (%s)" % (mask_url(url), last))
 
 
 def write_csv(path, header, rows):

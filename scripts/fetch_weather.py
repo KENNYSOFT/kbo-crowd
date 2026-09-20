@@ -130,18 +130,31 @@ def main():
 
     existing = {(r["stn"], r["tm"]): r for r in kbo.read_csv(kbo.data_path("weather.csv"))}
     merged = dict(existing)
-    added = 0
+    ok = failed = 0
+    first_error = None
 
     for stn in sorted(need):
         for start, end in month_spans(need[stn]):
             try:
                 for row in fetch_range(stn, start, end, key):
                     merged[(row[0], row[1])] = dict(zip(HEADER, row))
-                    added += 1
+                ok += 1
             except Exception as exc:
+                failed += 1
+                if first_error is None:
+                    first_error = str(exc)
                 print("  %s %s~%s 실패: %s" % (stn, start, end, exc), file=sys.stderr)
             time.sleep(0.3)
         print("  지점 %s: 누적 %d행" % (stn, sum(1 for k in merged if k[0] == stn)))
+
+    # 전부 실패했는데 0행으로 조용히 끝나면 성공한 것처럼 보인다.
+    if ok == 0 and failed:
+        hint = ""
+        # urllib 은 403 을 예외로 만들어 본문을 못 읽으므로 코드로도 판정한다.
+        if first_error and ("활용신청" in first_error or "403" in first_error):
+            hint = ("\n  인증키는 유효하지만 이 API 에 활용신청이 안 돼 있다.\n"
+                    "  apihub.kma.go.kr 에서 지상관측 ASOS 시간자료를 신청할 것.")
+        raise SystemExit("날씨 요청 %d건이 모두 실패했다.%s" % (failed, hint))
 
     rows = [[r.get(h, "") for h in HEADER] for r in merged.values()]
     rows.sort(key=lambda r: (str(r[0]), str(r[1])))
