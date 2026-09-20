@@ -2,6 +2,8 @@
 
 KBO 경기별 관중 기록을 매일 모아 CSV 로 쌓고, 좌석 제약에 잘린 수요를 되찾아 보는 개인 프로젝트.
 
+**[대시보드 →](https://kennysoft.github.io/kbo-crowd/)**
+
 ## 이 데이터의 성질
 
 KBO 가 공개하는 관중 수는 수요가 아니다. 표가 다 팔리면 기록이 구장 수용인원에서 멈추고, 그 위로 얼마나 더 원했는지는 사라진다. 2023년 이후 경기의 3할 남짓이 그렇게 상한에 눌려 있다. 그래서 평균 관중으로 인기를 재면 구장이 작은 팀이 체계적으로 저평가된다. 한화가 대표적이다. 평균 관중은 중하위권인데 매진율은 1위인데, 그것은 대전 구장이 17,000석이고 대구가 24,000석이기 때문이지 수요가 작아서가 아니다.
@@ -65,7 +67,9 @@ python -m venv .venv; .venv\Scripts\pip install -r requirements.txt
 
 ### 대시보드
 
-`dashboard/index.html` 이 탐색용 화면이다. 데이터는 생성물이라 버전 관리하지 않으므로 먼저 만들어야 한다.
+[kennysoft.github.io/kbo-crowd](https://kennysoft.github.io/kbo-crowd/) 에 올라간다. 매일 수집이 끝나면 워크플로가 다시 빌드해 배포하므로 늘 최신이다.
+
+로컬에서 보려면 데이터를 먼저 만들어야 한다. `dashboard/data.js` 는 생성물이라 버전 관리하지 않는다.
 
 ```bash
 .venv\Scripts\python analysis/export_dashboard.py
@@ -76,6 +80,8 @@ python -m venv .venv; .venv\Scripts\pip install -r requirements.txt
 ### 날씨
 
 기상청 API 허브에서 인증키를 받아 `KMA_API_KEY` 환경변수로 넘긴다. 키가 없으면 날씨 수집만 건너뛰고 나머지는 그대로 돈다. GitHub Actions 에서는 저장소 시크릿에 같은 이름으로 넣는다.
+
+**키를 받는 것과 API 를 쓰는 것은 별개다.** 허브는 API 마다 활용신청을 따로 받고, 신청 전에는 유효한 키로도 403 이 온다. 지상관측 ASOS 시간자료(`kma_sfctm3`)를 신청해야 한다. 메시지가 인증 실패처럼 보여서 키가 잘못된 줄 알기 쉬운데, 그 경우 `fetch_weather.py` 가 무엇을 신청해야 하는지 알려준다.
 
 ## 자동화
 
