@@ -63,6 +63,16 @@ python -m venv .venv; .venv\Scripts\pip install -r requirements.txt
 
 `demand.py` 는 홈과 원정으로 나눈 티켓 파워와 잠재 수요 순위를 낸다. `predict_today.py` 는 그날 경기의 매진 확률과 예상 관중을 낸다. `rain_price.py` 는 비가 수요를 얼마나 깎는지 재는데 날씨 데이터가 있어야 돈다.
 
+### 대시보드
+
+`dashboard/index.html` 이 탐색용 화면이다. 데이터는 생성물이라 버전 관리하지 않으므로 먼저 만들어야 한다.
+
+```bash
+.venv\Scripts\python analysis/export_dashboard.py
+```
+
+그 다음 `dashboard` 디렉토리를 정적 서버로 열면 된다. 구장 정렬 기준은 화면에서 고를 수 있고, 무엇으로 정렬했는지 차트 위에 표시된다. 아래 수용인원 표도 같은 순서를 따라가므로 두 화면을 나란히 대조할 수 있다.
+
 ### 날씨
 
 기상청 API 허브에서 인증키를 받아 `KMA_API_KEY` 환경변수로 넘긴다. 키가 없으면 날씨 수집만 건너뛰고 나머지는 그대로 돈다. GitHub Actions 에서는 저장소 시크릿에 같은 이름으로 넣는다.
