@@ -1,4 +1,4 @@
-name: 일일 수집
+name: 일일 수집과 배포
 
 on:
   schedule:
@@ -7,19 +7,32 @@ on:
   workflow_dispatch:
     inputs:
       full:
-        description: "전 시즌을 다시 받는다 (일정까지 전부)"
+        description: "전 시즌을 다시 받는다 (일정과 날씨까지 전부)"
         type: boolean
         default: false
+  push:
+    branches: [main]
+    # 화면이나 모델이 바뀌면 데이터를 다시 받지 않고 다시 배포만 한다.
+    paths:
+      - "dashboard/**"
+      - "analysis/**"
+      - ".github/workflows/daily.yml"
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
 
 concurrency:
-  group: collect
+  group: collect-and-deploy
   cancel-in-progress: false
 
 jobs:
-  collect:
+  run:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
 
     steps:
       - uses: actions/checkout@v4
@@ -27,12 +40,15 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
 
-      # 수집 스크립트는 표준 라이브러리만 쓴다. 설치할 것이 없다.
+      # 수집 스크립트는 표준 라이브러리만 쓴다. 여기까지는 설치할 것이 없다.
       - name: 관중
+        if: github.event_name != 'push'
         run: python scripts/fetch_crowd.py
 
       - name: 일정과 결과
+        if: github.event_name != 'push'
         run: |
           if [ "${{ inputs.full }}" = "true" ]; then
             python scripts/fetch_schedule.py
@@ -41,10 +57,12 @@ jobs:
           fi
 
       - name: 순위와 연승
+        if: github.event_name != 'push'
         run: python scripts/build_standings.py
 
       - name: 날씨
-        # 키가 없으면 스크립트가 알아서 건너뛴다. 날씨가 막혀도 나머지는 남아야 한다.
+        # 키가 없거나 활용신청 전이면 여기서 멈추되 나머지는 그대로 간다.
+        if: github.event_name != 'push'
         continue-on-error: true
         env:
           KMA_API_KEY: ${{ secrets.KMA_API_KEY }}
@@ -56,9 +74,11 @@ jobs:
           fi
 
       - name: 데이터셋 조립
+        if: github.event_name != 'push'
         run: python scripts/build_dataset.py
 
       - name: 변경분 커밋
+        if: github.event_name != 'push'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -70,3 +90,25 @@ jobs:
           git diff --staged --stat
           git commit -m "chore: $(TZ=Asia/Seoul date +%Y-%m-%d) 데이터 갱신"
           git push
+
+      # 여기부터는 대시보드를 만들어 Pages 로 올린다. 검열 회귀를 돌려야 해서
+      # 이 단계에만 numpy 계열이 필요하다.
+      - name: 분석 의존성
+        run: pip install -r requirements.txt
+
+      - name: 모델 회귀 테스트
+        run: python analysis/test_model.py
+
+      - name: 대시보드 데이터 생성
+        run: python analysis/export_dashboard.py
+
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dashboard
+
+      - id: deploy
+        uses: actions/deploy-pages@v4

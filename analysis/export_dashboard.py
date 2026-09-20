@@ -11,6 +11,7 @@ dashboard 디렉토리를 정적 서버로 열면 된다.
 """
 
 import argparse
+import datetime as dt
 import json
 import os
 import sys
@@ -69,6 +70,8 @@ def main():
     )
 
     payload = {
+        "generated": dt.datetime.now(dt.timezone(dt.timedelta(hours=9))).strftime("%Y-%m-%d %H:%M KST"),
+        "lastGame": full["date"].max(),
         "seasons": seasons,
         "teams": teams,
         "stadiums": stds,

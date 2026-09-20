@@ -1,8 +1,20 @@
+<!doctype html>
+<html lang="ko">
+<head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>KBO 관중 해부</title>
+<meta name="description" content="KBO 경기별 관중 기록에서 매진으로 잘린 수요를 검열 회귀로 되찾아 본 탐색 대시보드.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="KBO 관중 해부">
+<meta property="og:description" content="매진선에 잘린 관중 기록. 좌석 제약이 없었다면의 수요를 추정하면 팀의 순서가 바뀐다.">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
   :root{
+    color-scheme: light dark;
     --bg:#F3F5F7; --surface:#FFFFFF; --ink:#121820; --ink-2:#4A5560; --ink-3:#7C8794;
     --rule:#DCE1E6; --rule-strong:#B8C0C8;
     --cap:#D93F2B; --mark:#5C6B7A; --mark-soft:#5C6B7A33;
@@ -112,8 +124,12 @@
   .finding p{margin:0; color:var(--ink-2); font-size:14px;}
   .finding code{font-family:'IBM Plex Mono',monospace; font-size:.9em;
     background:var(--mark-soft); padding:1px 4px; border-radius:2px;}
-  footer{padding-block:32px 0; color:var(--ink-3); font-size:12.5px;}
+  footer{padding-block:32px 0; color:var(--ink-3); font-size:12.5px; line-height:1.9;}
+  footer a{color:var(--ink-2);}
+  footer a:hover{color:var(--ink);}
 </style>
+</head>
+<body>
 
 <div class="wrap">
   <header class="top">
@@ -470,9 +486,13 @@
 
   document.getElementById('eyebrow').textContent =
     'KBO · ' + D.seasons[0] + '–' + D.seasons[D.seasons.length-1] + ' · ' + fmt(G.length) + '경기';
-  document.getElementById('foot').textContent =
-    '출처 KBO 기록실 경기 관중 현황 · 수용인원과 매진 여부는 원자료에 없는 추정값 · ' +
-    '잠재 수요는 ' + (M.minSeason||'2023') + '시즌 이후 ' + fmt(M.n||0) + '경기로 맞춘 검열 회귀 추정값';
+  document.getElementById('foot').innerHTML =
+    '출처 KBO 기록실 경기 관중 현황. 수용인원과 매진 여부는 원자료에 없는 추정값이고, ' +
+    '잠재 수요는 ' + (D.seasons.indexOf(M.minSeason) >= 0 ? M.minSeason : '2023') +
+    '시즌 이후 ' + fmt(M.n||0) + '경기로 맞춘 검열 회귀 추정값이다.' +
+    (D.lastGame ? '<br>마지막 경기 ' + esc(D.lastGame) : '') +
+    (D.generated ? ' · 갱신 ' + esc(D.generated) : '') +
+    ' · <a href="https://github.com/KENNYSOFT/kbo-crowd">소스와 데이터</a>';
 
   renderAll();
   renderDemand();
@@ -481,3 +501,5 @@
   renderCapTable();
 })();
 </script>
+</body>
+</html>
