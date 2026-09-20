@@ -1,0 +1,5 @@
+# analysis/ 전용. 수집 스크립트(scripts/)는 표준 라이브러리만 쓰므로
+# GitHub Actions 는 아무것도 설치하지 않는다.
+numpy>=1.26
+scipy>=1.11
+pandas>=2.1

@@ -1,0 +1,72 @@
+name: 일일 수집
+
+on:
+  schedule:
+    # UTC 20:00 = KST 05:00. 경기가 끝나고 관중 수가 집계된 뒤에 돈다.
+    - cron: "0 20 * * *"
+  workflow_dispatch:
+    inputs:
+      full:
+        description: "전 시즌을 다시 받는다 (일정까지 전부)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: collect
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # 수집 스크립트는 표준 라이브러리만 쓴다. 설치할 것이 없다.
+      - name: 관중
+        run: python scripts/fetch_crowd.py
+
+      - name: 일정과 결과
+        run: |
+          if [ "${{ inputs.full }}" = "true" ]; then
+            python scripts/fetch_schedule.py
+          else
+            python scripts/fetch_schedule.py --current-only
+          fi
+
+      - name: 순위와 연승
+        run: python scripts/build_standings.py
+
+      - name: 날씨
+        # 키가 없으면 스크립트가 알아서 건너뛴다. 날씨가 막혀도 나머지는 남아야 한다.
+        continue-on-error: true
+        env:
+          KMA_API_KEY: ${{ secrets.KMA_API_KEY }}
+        run: |
+          if [ "${{ inputs.full }}" = "true" ]; then
+            python scripts/fetch_weather.py
+          else
+            python scripts/fetch_weather.py --recent-days 7
+          fi
+
+      - name: 데이터셋 조립
+        run: python scripts/build_dataset.py
+
+      - name: 변경분 커밋
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data
+          if git diff --staged --quiet; then
+            echo "바뀐 데이터가 없어 커밋하지 않는다."
+            exit 0
+          fi
+          git diff --staged --stat
+          git commit -m "chore: $(TZ=Asia/Seoul date +%Y-%m-%d) 데이터 갱신"
+          git push

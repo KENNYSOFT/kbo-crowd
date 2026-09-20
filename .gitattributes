@@ -1,0 +1,7 @@
+# 개행을 LF 로 고정한다. 로컬은 Windows, Actions 는 Linux 라서 이게 없으면
+# 내용이 같은데도 파일 전체가 바뀐 것으로 잡혀 매일 diff 가 무의미해진다.
+* text=auto eol=lf
+*.csv text eol=lf
+*.py text eol=lf
+*.yml text eol=lf
+*.md text eol=lf
