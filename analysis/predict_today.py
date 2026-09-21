@@ -117,36 +117,42 @@ def upcoming(date):
     return games
 
 
-def main():
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--date", help="예보할 날짜. 비우면 오늘, 오늘 경기가 없으면 다음 경기일")
-    ap.add_argument("--weather", action="store_true", help="날씨 변수를 함께 쓴다")
-    ap.add_argument("--min-season", default="2023")
-    args = ap.parse_args()
+def resolve_target(date=None):
+    """예보할 날짜를 정한다. 그 날짜에 경기가 없으면 다음 경기일로 넘긴다.
 
-    target = args.date or dt.date.today().isoformat()
+    (날짜, 넘어갔는지) 를 돌려주고, 남은 경기가 없으면 (None, True).
+    """
+    target = date or dt.date.today().isoformat()
+    if not upcoming(target).empty:
+        return target, False
+    schedule = data("schedule.csv")
+    later = sorted(d for d in schedule["date"].unique() if d > target)
+    return (later[0], True) if later else (None, True)
+
+
+def predict_games(target, min_season="2023", weather=True, log=None):
+    """그 날짜 경기의 매진 확률과 예상 관중을 낸다.
+
+    games 에 capacity, prob, expected, latent 를 붙여 돌려준다. 낼 수 없으면
+    (None, 사유) 다. CLI 와 대시보드가 같은 함수를 쓰게 해서, 한쪽만 고쳐
+    두 화면의 숫자가 갈리는 일이 없게 한다.
+    """
+    def say(message):
+        if log:
+            log(message)
+
     games = upcoming(target)
     if games.empty:
-        schedule = data("schedule.csv")
-        later = sorted(d for d in schedule["date"].unique() if d > target)
-        if not later:
-            raise SystemExit("%s 이후 예정 경기가 없다." % target)
-        target = later[0]
-        games = upcoming(target)
-        print("%s 에는 경기가 없어 다음 경기일 %s 로 본다." % (args.date or "오늘", target))
+        return None, {"reason": "%s 에 경기가 없다" % target}
 
-    train = model.load_dataset(min_season=args.min_season)
+    train = model.load_dataset(min_season=min_season)
     train = train[train["date"] < target]
     if len(train) < 200:
-        raise SystemExit("학습할 경기가 %d개뿐이다." % len(train))
+        return None, {"reason": "학습할 경기가 %d개뿐이다" % len(train)}
 
-    if args.weather and train["temp"].notna().sum() == 0:
-        print("날씨 데이터가 비어 있어 날씨 없이 예보한다.")
-        args.weather = False
-
-    X = model.design_matrix(train, weather=args.weather)
-    fit = model.fit_tobit(X.values, train["log_crowd"].values, train["log_cap"].values)
-    ref = [c for c in X.columns if c != "const"]
+    if weather and train["temp"].notna().sum() == 0:
+        say("날씨 데이터가 비어 있어 날씨 없이 예보한다.")
+        weather = False
 
     # 그 시즌 그 구장의 상한. 아직 안 열린 경기라 관측값에서 직접 못 구한다.
     caps = train.groupby(["season", "stadium"])["capacity"].max()
@@ -157,16 +163,17 @@ def main():
     ]
     games = games[games["capacity"].notna()].copy()
     if games.empty:
-        raise SystemExit("상한을 알 수 없는 구장뿐이라 예보할 수 없다.")
+        return None, {"reason": "상한을 알 수 없는 구장뿐이다"}
 
-    if args.weather:
+    matched = 0
+    if weather:
         # 아직 열리지 않은 경기에는 관측이 없다. 그대로 두면 design_matrix 가
         # 그 열을 만들지 못하고 reindex 가 0 으로 채우는데, 그것은 '결측'이
         # 아니라 기온 0 도에 습도 0 퍼센트라는 뜻이 되어 예측이 조용히 틀어진다.
         # 그래서 예보를 먼저 붙이고, 그래도 빈 자리만 평년값으로 둔다.
-        games, from_forecast = attach_forecast(games)
-        if from_forecast:
-            print("  기상청 단기예보를 붙였다 (%d경기)." % from_forecast)
+        games, matched = attach_forecast(games)
+        if matched:
+            say("  기상청 단기예보를 붙였다 (%d경기)." % matched)
         missing = [c for c in WEATHER_COLS
                    if c not in games.columns or games[c].isna().all()]
         for col in missing:
@@ -176,30 +183,54 @@ def main():
         for col in partial:
             games[col] = games[col].fillna(pd.to_numeric(train[col], errors="coerce").median())
         if missing:
-            print("  예보가 없어 %s 는 평년값으로 둔다." % ", ".join(missing))
+            say("  예보가 없어 %s 는 평년값으로 둔다." % ", ".join(missing))
         elif partial:
-            print("  일부 경기의 %s 가 비어 평년값으로 채웠다." % ", ".join(partial))
+            say("  일부 경기의 %s 가 비어 평년값으로 채웠다." % ", ".join(partial))
 
-    Xg = model.design_matrix(games, weather=args.weather, reference=ref)
+    X = model.design_matrix(train, weather=weather)
+    fit = model.fit_tobit(X.values, train["log_crowd"].values, train["log_cap"].values)
+    ref = [c for c in X.columns if c != "const"]
+
+    Xg = model.design_matrix(games, weather=weather, reference=ref)
     log_cap = np.log(games["capacity"].values)
-    prob = model.sellout_probability(fit, Xg.values, log_cap)
-    expected = np.exp(model.expected_observed(fit, Xg.values, log_cap))
-    latent = np.exp(model.latent_demand(fit, Xg.values))
+    games["prob"] = model.sellout_probability(fit, Xg.values, log_cap)
+    games["expected"] = np.exp(model.expected_observed(fit, Xg.values, log_cap))
+    games["latent"] = np.exp(model.latent_demand(fit, Xg.values))
+    games = games.sort_values("prob", ascending=False).reset_index(drop=True)
+
+    return games, {"target": target, "train": len(train),
+                   "weather": bool(weather), "forecast": int(matched)}
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--date", help="예보할 날짜. 비우면 오늘, 오늘 경기가 없으면 다음 경기일")
+    ap.add_argument("--weather", action="store_true", help="날씨 변수를 함께 쓴다")
+    ap.add_argument("--min-season", default="2023")
+    args = ap.parse_args()
+
+    target, moved = resolve_target(args.date)
+    if target is None:
+        raise SystemExit("%s 이후 예정 경기가 없다." % (args.date or "오늘"))
+    if moved:
+        print("%s 에는 경기가 없어 다음 경기일 %s 로 본다." % (args.date or "오늘", target))
+
+    games, meta = predict_games(target, args.min_season, args.weather, log=print)
+    if games is None:
+        raise SystemExit(meta["reason"])
 
     print()
-    print("%s 티켓 난이도  (학습 %d경기, %s 이전)" % (target, len(train), target))
+    print("%s 티켓 난이도  (학습 %d경기, %s 이전)" % (target, meta["train"], target))
     print("-" * 78)
     print("  %-5s %-4s %-11s %6s %7s %7s  %5s  %s"
           % ("구장", "시각", "경기", "좌석", "예상", "잠재수요", "매진율", "난이도"))
-    order = np.argsort(-prob)
-    for i in order:
-        g = games.iloc[i]
-        note = g.get("note", "")
+    for g in games.itertuples():
+        note = getattr(g, "note", "")
         cancel = " [%s]" % note if isinstance(note, str) and note not in ("-", "") else ""
         print("  %-5s %-5s %-4s vs %-4s %6d %7d %7d  %4.0f%%  %s%s"
-              % (g["stadium"], g["start"], g["away"], g["home"],
-                 g["capacity"], expected[i], latent[i], prob[i] * 100,
-                 grade(prob[i]), cancel))
+              % (g.stadium, g.start, g.away, g.home,
+                 g.capacity, g.expected, g.latent, g.prob * 100,
+                 grade(g.prob), cancel))
     print("-" * 78)
     print("  예상은 좌석 제약까지 반영한 관중 수, 잠재수요는 제약이 없다면의 수요다.")
     print("  둘이 벌어질수록 표 구하기가 어렵다는 뜻이다.")

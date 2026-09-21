@@ -22,6 +22,7 @@ import pandas as pd
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import model
 from demand import team_effects
+from predict_today import grade, predict_games, resolve_target
 from rain_price import rain_effect
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -79,6 +80,60 @@ def rain_summary(df):
     return {"shelter": shelter, "effects": effects, "timing": timing, "n": len(d)}
 
 
+def next_day(min_season):
+    """다음 경기일 예측. 화면 맨 위에 올릴 값이다.
+
+    CLI 의 predict_today 와 같은 함수를 써서 두 화면의 숫자가 갈리지 않게 한다.
+    예정 경기가 없거나(시즌 종료) 학습이 부족하면 None 이고, 화면은 그 섹션을
+    통째로 접는다.
+    """
+    target, _moved = resolve_target()
+    if target is None:
+        return None
+    games, meta = predict_games(target, min_season=min_season, weather=True)
+    if games is None:
+        return None
+
+    # 강수확률은 모델 피처가 아니라 읽는 사람을 위한 값이라 예보에서 직접 읽는다.
+    pop = {}
+    path = os.path.join(ROOT, "data", "forecast.csv")
+    if os.path.exists(path):
+        fc = pd.read_csv(path, dtype={"hour": str})
+        for r in fc.itertuples():
+            pop[(r.stadium, r.date, str(r.hour).zfill(2))] = r.rain_prob
+
+    def number(value, digits=1):
+        return None if value is None or pd.isna(value) else round(float(value), digits)
+
+    rows = []
+    for g in games.itertuples():
+        hour = str(g.start)[:2]
+        note = getattr(g, "note", "")
+        rows.append({
+            "stadium": g.stadium,
+            "start": g.start,
+            "home": g.home,
+            "away": g.away,
+            "seats": int(g.capacity),
+            "expected": int(round(g.expected)),
+            "latent": int(round(g.latent)),
+            "prob": round(float(g.prob), 4),
+            "grade": grade(g.prob),
+            "temp": number(getattr(g, "temp", None)),
+            "rain": number(getattr(g, "rain_game", None)),
+            "pop": number(pop.get((g.stadium, g.date, hour)), 0),
+            "note": note if isinstance(note, str) and note not in ("-", "") else "",
+        })
+
+    return {
+        "date": target,
+        "weather": meta["weather"],
+        "forecast": meta["forecast"],
+        "trainN": meta["train"],
+        "games": rows,
+    }
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--out", default=os.path.join(ROOT, "dashboard", "data.js"))
@@ -122,6 +177,7 @@ def main():
     )
 
     payload = {
+        "next": next_day(args.min_season),
         "rain": rain_summary(train),
         "generated": dt.datetime.now(dt.timezone(dt.timedelta(hours=9))).strftime("%Y-%m-%d %H:%M KST"),
         "lastGame": full["date"].max(),
