@@ -22,9 +22,61 @@ import pandas as pd
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import model
 from demand import team_effects
+from rain_price import rain_effect
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DOW_ORDER = ["월", "화", "수", "목", "금", "토", "일"]
+
+
+def rain_summary(df):
+    """비가 수요에 주는 영향을 화면에 넘길 형태로 간추린다.
+
+    3월은 뺀다. 기상청 시간자료는 11월부터 이듬해 3월까지 강수를 3시간 누적으로
+    주므로 경기 시간대 강수가 어긋난다. rain_price.py 와 같은 기준이다.
+    날씨가 아직 없으면 None 을 주어 화면이 그 섹션을 통째로 접게 한다.
+    """
+    if "rain_game" not in df.columns or df["rain_game"].notna().sum() == 0:
+        return None
+
+    d = df[df["month"].astype(str) != "03"].copy()
+    d["rain_game"] = pd.to_numeric(d["rain_game"], errors="coerce")
+    d["rain_day"] = pd.to_numeric(d.get("rain_day"), errors="coerce")
+    d["is_dome"] = pd.to_numeric(d["is_dome"], errors="coerce").fillna(0)
+    wet = d["rain_game"].fillna(0) > 0
+    weekend = d["dow"].isin(["토", "일"])
+
+    def pair(subset):
+        w, dry = subset[subset["rain_game"].fillna(0) > 0], subset[subset["rain_game"].fillna(0) <= 0]
+        if len(w) < 5 or len(dry) < 5:
+            return None
+        return {"games": len(subset), "wet": len(w),
+                "wetOcc": round(float(w["occupancy"].mean()), 4),
+                "dryOcc": round(float(dry["occupancy"].mean()), 4)}
+
+    shelter = []
+    for label, mask in [("야외 구장", d["is_dome"] == 0), ("돔 구장", d["is_dome"] == 1)]:
+        got = pair(d[mask])
+        if got:
+            shelter.append(dict(label=label, **got))
+
+    effects = []
+    for label, subset in [("야외 전체", d[d["is_dome"] == 0]),
+                          ("야외 주중", d[(d["is_dome"] == 0) & ~weekend]),
+                          ("야외 주말", d[(d["is_dome"] == 0) & weekend])]:
+        name, n, pct, _per_mm, n_wet, _why = rain_effect(subset, label)
+        if pct is not None:
+            effects.append({"label": name, "n": n, "wet": n_wet, "pct": round(pct, 4)})
+
+    timing = []
+    wet_day = d["rain_day"].fillna(0) > 0
+    for label, mask in [("경기 중에 왔다", wet), ("그날만 왔다", wet_day & ~wet), ("안 왔다", ~wet_day)]:
+        subset = d[mask]
+        if len(subset):
+            timing.append({"label": label, "n": len(subset),
+                           "occ": round(float(subset["occupancy"].mean()), 4),
+                           "sellout": round(float(subset["sold_out"].mean()), 4)})
+
+    return {"shelter": shelter, "effects": effects, "timing": timing, "n": len(d)}
 
 
 def main():
@@ -70,6 +122,7 @@ def main():
     )
 
     payload = {
+        "rain": rain_summary(train),
         "generated": dt.datetime.now(dt.timezone(dt.timedelta(hours=9))).strftime("%Y-%m-%d %H:%M KST"),
         "lastGame": full["date"].max(),
         "seasons": seasons,
