@@ -53,13 +53,16 @@ def design_matrix(df, weather=False, reference=None):
             cols[name] = v.fillna(v.median() if v.notna().any() else 0.0)
 
     if weather:
-        for name in ["temp", "rain_game", "humid", "wind", "cloud"]:
+        for name in ["temp", "rain_game", "rain_day", "humid", "wind", "cloud"]:
             if name in df.columns:
                 v = pd.to_numeric(df[name], errors="coerce")
                 cols[name] = v.fillna(v.median() if v.notna().any() else 0.0)
         if "rain_game" in cols:
             # 비는 양보다 '왔는가'가 더 세게 작동할 수 있어 둘 다 넣는다.
             cols["rain_any"] = (cols["rain_game"] > 0).astype(float)
+        if "rain_day" in cols:
+            # 경기 중에는 그쳤어도 그날 비가 왔으면 표를 덜 산다. 다른 경로다.
+            cols["rain_day_any"] = (cols["rain_day"] > 0).astype(float)
 
     X = pd.DataFrame(cols, index=df.index)
 

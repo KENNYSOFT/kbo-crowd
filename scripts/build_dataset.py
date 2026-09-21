@@ -26,7 +26,7 @@ HEADER = [
     "home_rank", "home_wpct", "home_gb", "home_streak", "home_last10",
     "away_rank", "away_wpct", "away_gb", "away_streak", "away_last10",
     "gb_from_playoff_line", "season_progress",
-    "temp", "rain", "rain_game", "humid", "wind", "cloud",
+    "temp", "rain", "rain_game", "rain_day", "humid", "wind", "cloud",
 ]
 
 
@@ -53,7 +53,11 @@ def weather_index(rows):
 
 
 def game_rain(index, stn, date, hour, span=3):
-    """경기 시간대 강수량 합계. 시작 시각부터 span 시간."""
+    """경기 시간대 강수량 합계. 시작 시각부터 span 시간.
+
+    관측이 하나도 없으면 빈 값을 준다. 0 으로 채우면 '비가 오지 않았다'와
+    '재지 못했다'가 같아져 버린다. 관측이 있는 시각만 더한다.
+    """
     total = 0.0
     seen = False
     for offset in range(span):
@@ -117,6 +121,7 @@ def main():
             stand.get("gb_from_playoff_line", ""), stand.get("season_progress", ""),
             (wx or {}).get("temp", ""), (wx or {}).get("rain", ""),
             game_rain(weather, stn, g["date"], hour) if (stn and hour is not None) else "",
+            (wx or {}).get("rain_day", ""),
             (wx or {}).get("humid", ""), (wx or {}).get("wind", ""), (wx or {}).get("cloud", ""),
         ])
 
@@ -125,7 +130,8 @@ def main():
     n = kbo.write_csv(path, HEADER, rows)
     kbo.report("데이터셋", path, n)
 
-    filled = sum(1 for r in rows if r[27] != "")
+    temp_at = HEADER.index("temp")
+    filled = sum(1 for r in rows if r[temp_at] != "")
     print("  일정 미매칭 %d경기 / 날씨 있는 경기 %d (%d%%)"
           % (unmatched_schedule, filled, round(filled / len(rows) * 100) if rows else 0))
 
