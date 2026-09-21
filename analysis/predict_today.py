@@ -38,8 +38,61 @@ def grade(p):
     return GRADES[-1][1]
 
 
+WEATHER_COLS = ["temp", "rain_game", "rain_day", "humid", "wind", "cloud"]
+
+
 def data(name):
     return pd.read_csv(os.path.join(ROOT, "data", name), dtype={"season": str, "month": str})
+
+
+def attach_forecast(games, span=3):
+    """data/forecast.csv 의 예보를 경기 행에 붙인다.
+
+    관측 쪽과 컬럼 이름을 맞춰야 모델이 같은 자리로 받는다. 경기 시간대 강수는
+    관측과 같은 방식으로 시작 시각부터 span 시간을 더하고, 그날 누적은 그 날짜
+    예보 전체를 더한다. 예보가 없는 구장이나 시각은 비워 두어 호출한 쪽이
+    평년값으로 채우게 한다.
+    """
+    path = os.path.join(ROOT, "data", "forecast.csv")
+    if not os.path.exists(path):
+        return games, 0
+    fc = pd.read_csv(path, dtype={"hour": str})
+    if fc.empty:
+        return games, 0
+
+    for col in ["temp", "rain_mm", "humid", "wind", "sky"]:
+        fc[col] = pd.to_numeric(fc[col], errors="coerce")
+    at = {(r.stadium, r.date, int(r.hour)): r for r in fc.itertuples()}
+    day_rain = fc.groupby(["stadium", "date"])["rain_mm"].sum()
+
+    values = {col: [] for col in WEATHER_COLS}
+    matched = 0
+    for g in games.itertuples():
+        start = str(getattr(g, "start", "") or "")
+        hour = int(start[:2]) if len(start) >= 2 and start[:2].isdigit() else None
+        row = at.get((g.stadium, g.date, hour)) if hour is not None else None
+        if row is None:
+            for col in WEATHER_COLS:
+                values[col].append(float("nan"))
+            continue
+        matched += 1
+        total, seen = 0.0, False
+        for offset in range(span):
+            nxt = at.get((g.stadium, g.date, (hour + offset) % 24))
+            if nxt is not None and pd.notna(nxt.rain_mm):
+                total += float(nxt.rain_mm)
+                seen = True
+        values["temp"].append(row.temp)
+        values["rain_game"].append(total if seen else float("nan"))
+        values["rain_day"].append(float(day_rain.get((g.stadium, g.date), float("nan"))))
+        values["humid"].append(row.humid)
+        values["wind"].append(row.wind)
+        values["cloud"].append(row.sky)
+
+    games = games.copy()
+    for col in WEATHER_COLS:
+        games[col] = values[col]
+    return games, matched
 
 
 def upcoming(date):
@@ -105,6 +158,27 @@ def main():
     games = games[games["capacity"].notna()].copy()
     if games.empty:
         raise SystemExit("상한을 알 수 없는 구장뿐이라 예보할 수 없다.")
+
+    if args.weather:
+        # 아직 열리지 않은 경기에는 관측이 없다. 그대로 두면 design_matrix 가
+        # 그 열을 만들지 못하고 reindex 가 0 으로 채우는데, 그것은 '결측'이
+        # 아니라 기온 0 도에 습도 0 퍼센트라는 뜻이 되어 예측이 조용히 틀어진다.
+        # 그래서 예보를 먼저 붙이고, 그래도 빈 자리만 평년값으로 둔다.
+        games, from_forecast = attach_forecast(games)
+        if from_forecast:
+            print("  기상청 단기예보를 붙였다 (%d경기)." % from_forecast)
+        missing = [c for c in WEATHER_COLS
+                   if c not in games.columns or games[c].isna().all()]
+        for col in missing:
+            games[col] = pd.to_numeric(train[col], errors="coerce").median()
+        partial = [c for c in WEATHER_COLS
+                   if c in games.columns and games[c].isna().any() and c not in missing]
+        for col in partial:
+            games[col] = games[col].fillna(pd.to_numeric(train[col], errors="coerce").median())
+        if missing:
+            print("  예보가 없어 %s 는 평년값으로 둔다." % ", ".join(missing))
+        elif partial:
+            print("  일부 경기의 %s 가 비어 평년값으로 채웠다." % ", ".join(partial))
 
     Xg = model.design_matrix(games, weather=args.weather, reference=ref)
     log_cap = np.log(games["capacity"].values)

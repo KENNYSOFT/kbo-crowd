@@ -73,6 +73,15 @@ jobs:
             python scripts/fetch_weather.py --recent-days 7
           fi
 
+      - name: 앞으로 열릴 경기의 예보
+        # 예보는 발표마다 바뀌므로 커밋하지 않는다. 대시보드와 예측이 그날
+        # 받은 것을 쓴다.
+        if: github.event_name != 'push'
+        continue-on-error: true
+        env:
+          KMA_API_KEY: ${{ secrets.KMA_API_KEY }}
+        run: python scripts/fetch_forecast.py
+
       - name: 데이터셋 조립
         if: github.event_name != 'push'
         run: python scripts/build_dataset.py
