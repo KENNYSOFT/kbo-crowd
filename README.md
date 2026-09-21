@@ -19,7 +19,8 @@ KBO 가 공개하는 관중 수는 수요가 아니다. 표가 다 팔리면 기
 | `data/games.csv` | 경기 | 날짜, 요일, 홈, 원정, 구장, 관중 수 |
 | `data/schedule.csv` | 편성 | 시작 시각, 스코어, 우천취소 여부 (취소된 경기도 남는다) |
 | `data/standings.csv` | 경기 | 그 경기 **직전**의 순위, 승률, 게임차, 연승, 최근 10경기 |
-| `data/weather.csv` | 시간 | 구장 인근 관측소의 기온, 강수, 습도, 풍속, 운량 |
+| `data/weather.csv` | 시간 | 구장 인근 관측소의 기온, 시간당 강수, 일누적 강수, 습도, 풍속, 운량 |
+| `data/forecast.csv` | 시간 | 앞으로 열릴 경기 구장의 단기예보 (생성물이라 버전 관리하지 않는다) |
 | `data/stadiums.csv` | 구장 | 홈 구단, 돔 여부, 대응 관측소, 좌표 (손으로 관리) |
 | `data/dataset.csv` | 경기 | 위를 모두 이어 붙이고 수용인원과 매진 여부를 붙인 모델 입력 |
 
@@ -42,6 +43,7 @@ python scripts/fetch_crowd.py
 python scripts/fetch_schedule.py
 python scripts/build_standings.py
 python scripts/fetch_weather.py
+python scripts/fetch_forecast.py
 python scripts/build_dataset.py
 ```
 
@@ -63,7 +65,7 @@ python -m venv .venv; .venv\Scripts\pip install -r requirements.txt
 .venv\Scripts\python analysis/test_model.py
 ```
 
-`demand.py` 는 홈과 원정으로 나눈 티켓 파워와 잠재 수요 순위를 낸다. `predict_today.py` 는 그날 경기의 매진 확률과 예상 관중을 낸다. `rain_price.py` 는 비가 수요를 얼마나 깎는지 재는데 날씨 데이터가 있어야 돈다.
+`demand.py` 는 홈과 원정으로 나눈 티켓 파워와 잠재 수요 순위를 낸다. `predict_today.py` 는 그날 경기의 매진 확률과 예상 관중을 내고, `--weather` 를 주면 단기예보를 붙인다(예보가 없는 자리만 평년값으로 채우고 그 사실을 알린다). `rain_price.py` 는 비가 수요를 얼마나 깎는지 재는데 날씨 데이터가 있어야 돈다.
 
 ### 대시보드
 
@@ -81,7 +83,19 @@ python -m venv .venv; .venv\Scripts\pip install -r requirements.txt
 
 기상청 API 허브에서 인증키를 받아 `KMA_API_KEY` 환경변수로 넘긴다. 키가 없으면 날씨 수집만 건너뛰고 나머지는 그대로 돈다. GitHub Actions 에서는 저장소 시크릿에 같은 이름으로 넣는다.
 
-**키를 받는 것과 API 를 쓰는 것은 별개다.** 허브는 API 마다 활용신청을 따로 받고, 신청 전에는 유효한 키로도 403 이 온다. 지상관측 ASOS 시간자료(`kma_sfctm3`)를 신청해야 한다. 메시지가 인증 실패처럼 보여서 키가 잘못된 줄 알기 쉬운데, 그 경우 `fetch_weather.py` 가 무엇을 신청해야 하는지 알려준다.
+**키를 받는 것과 API 를 쓰는 것은 별개다.** 허브는 API 마다 활용신청을 따로 받고, 신청 전에는 유효한 키로도 403 이 온다. 메시지가 인증 실패처럼 보여서 키가 잘못된 줄 알기 쉬운데, 그 경우 `fetch_weather.py` 가 무엇을 신청해야 하는지 알려준다. 신청할 것은 세 가지다.
+
+| API | 쓰는 곳 |
+|---|---|
+| 지상관측 ASOS 시간자료 (`kma_sfctm3`) | 지나간 경기의 실제 날씨 |
+| 단기예보조회 (`getVilageFcst`) | 앞으로 열릴 경기의 예보. 3일치를 1시간 단위로 준다 |
+| 초단기예보조회 (`getUltraSrtFcst`) | 6시간 이내 정밀 예보. 없어도 굴러간다 |
+
+예보는 위경도가 아니라 격자(nx, ny)로 조회한다. 그 변환은 공개된 Lambert Conformal Conic 공식이라 별도 API 없이 `fetch_forecast.py` 가 계산한다.
+
+읽을 때 주의할 것이 두 가지 있다. 기상청은 비가 오지 않은 시각의 강수를 `-9.0` 으로 주는데 이것은 결측이 아니라 0 이다. 그래서 `rain` 은 0 으로 채워 저장하고, 대신 그날 비가 오긴 했는지는 `rain_day`(일누적)로 가른다. 비가 그친 뒤에도 `rain` 은 0 이 되지만 `rain_day` 는 누적을 유지하기 때문이다. 그리고 11월부터 이듬해 3월까지는 시간당이 아니라 3시간 누적으로 오므로, 개막 시기 경기의 시간대 강수는 믿을 수 없다. `rain_price.py` 가 3월을 기본으로 빼는 이유다.
+
+서버가 간헐적으로 504 를 낸다. 기간 길이와 무관하게 여덟 번에 한 번쯤 나므로 재시도로 넘긴다.
 
 ## 자동화
 
