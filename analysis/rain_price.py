@@ -87,7 +87,40 @@ def scheduled_with_rain(min_season, keep_march=False, span=3):
     occupancy = {(r.date, r.home, r.away): r.occupancy for r in played.itertuples()}
     sch["occupancy"] = [occupancy.get((r.date, r.home, r.away), np.nan)
                         for r in sch.itertuples()]
+
+    # 그 경기가 평소 얼마나 팔리는 자리인지. 비와 무관하게 정해지는 값이라,
+    # 취소가 강수뿐 아니라 흥행에도 갈리는지 보는 잣대로 쓴다.
+    played = played.assign(dow_en=pd.to_datetime(played["date"]).dt.strftime("%a"))
+    pull = played.groupby(["season", "home", "dow_en"])["occupancy"].mean()
+    dow_en = pd.to_datetime(sch["date"]).dt.strftime("%a")
+    sch["pull"] = [pull.get((s, h, d), np.nan)
+                   for s, h, d in zip(sch["season"], sch["home"], dow_en)]
     return sch[sch["rain"].notna()].copy()
+
+
+def selection_table(sch):
+    """열린 경기가 흥행 쪽으로 걸러졌는지 본다.
+
+    취소는 강수에만 갈리는 것이 아니다. 표가 많이 팔린 경기일수록 웬만하면
+    열기 때문에, 비가 센 구간에 남은 경기는 원래 잘 팔리던 자리로 쏠린다.
+    그래서 열린 경기의 점유율이 비가 셀수록 되레 높아 보인다.
+    """
+    sch = sch[sch["pull"].notna()].copy()
+    sch["band"] = pd.cut(sch["rain"], bins=BANDS, labels=BAND_LABELS)
+
+    print("=== 센 비에 열리는 경기는 원래 잘 팔리던 경기다 ===")
+    print("  %-7s %6s %11s %11s %8s %10s"
+          % ("강수", "편성", "편성 흥행", "열린 흥행", "선택 폭", "열린 점유"))
+    for band, g in sch.groupby("band", observed=True):
+        opened = g[~g["cancelled"] & g["occupancy"].notna()]
+        if len(opened) < 3:
+            continue
+        booked, played_pull = g["pull"].mean(), opened["pull"].mean()
+        print("  %-7s %6d %10.1f%% %10.1f%% %+7.1f%%p %9.1f%%"
+              % (band, len(g), booked * 100, played_pull * 100,
+                 (played_pull - booked) * 100, opened["occupancy"].mean() * 100))
+    print("  편성 흥행은 그 경기가 평소 팔리는 정도, 열린 흥행은 그중 실제로 열린 것만")
+    print("  추린 값이다. 선택 폭이 곧 취소가 표본을 기울인 크기다.")
 
 
 def cancellation_table(sch):
@@ -240,8 +273,11 @@ def main():
           % (args.min_season, len(recent), cancelled, cancelled / len(recent) * 100))
 
     # 위까지는 열린 경기만 본 것이다. 비의 큰 몫이 거기에 안 잡힌다.
+    sch = scheduled_with_rain(args.min_season, args.keep_march)
     print()
-    cancellation_table(scheduled_with_rain(args.min_season, args.keep_march))
+    cancellation_table(sch)
+    print()
+    selection_table(sch)
 
 
 if __name__ == "__main__":
