@@ -19,8 +19,11 @@
     --rule:#DCE1E6; --rule-strong:#B8C0C8;
     --cap:#D93F2B; --mark:#5C6B7A; --mark-soft:#5C6B7A33;
     --latent:#2F7D8C; --rain:#3E6FA8; --grid:#E6EAEE;
-    --t-KIA:#E4002B; --t-SSG:#A8152F; --t-LG:#D6246E; --t-키움:#8E3B5C; --t-한화:#F5710C;
-    --t-삼성:#1272D6; --t-롯데:#1D3F82; --t-두산:#4F6FB5; --t-NC:#2E9AA0; --t-KT:#7A8087;
+    /* 구단 대표색은 나무위키 각 구단 문서에 적힌 값 그대로다. */
+    --t-KIA:#EA0029; --t-SSG:#CE0E2D; --t-LG:#C40037; --t-키움:#570514; --t-한화:#FC4E00;
+    --t-삼성:#074CA1; --t-롯데:#041E42; --t-두산:#1A1748; --t-NC:#315288; --t-KT:#000000;
+    /* 난이도 다섯 칸. 빨강에서 회색으로 가는 한 축이라 순서가 그대로 읽힌다. */
+    --g1:#B3271A; --g2:#D9432B; --g3:#E58A3C; --g4:#7E9BA6; --g5:#A9B4BE;
   }
   @media (prefers-color-scheme: dark){
     :root:not([data-theme="light"]){
@@ -28,8 +31,11 @@
       --rule:#252D36; --rule-strong:#3A444F;
       --cap:#FF6A52; --mark:#8A99A8; --mark-soft:#8A99A840;
       --latent:#4FBDD0; --rain:#6FA3DC; --grid:#1D242C;
-      --t-KIA:#FF3A5E; --t-SSG:#D8465C; --t-LG:#F2599A; --t-키움:#C0708E; --t-한화:#FF9440;
-      --t-삼성:#4E9BF0; --t-롯데:#5B82C9; --t-두산:#8AA4E0; --t-NC:#3FC3CA; --t-KT:#9FA8B2;
+      /* 원본이 어두운 구단색은 다크 배경에서 묻힌다. 밝기를 올린 만큼 채도를 낮춰
+         같은 계열끼리(빨강 넷, 남색 셋) 겹치지 않게 옮긴 값이다. */
+      --t-KIA:#EA0029; --t-SSG:#E21435; --t-LG:#E10644; --t-키움:#D4304E; --t-한화:#FC4E00;
+      --t-삼성:#1870DD; --t-롯데:#2F72CF; --t-두산:#6E69B8; --t-NC:#4971B3; --t-KT:#737373;
+      --g1:#FF5C42; --g2:#FF7A5C; --g3:#F2A65A; --g4:#7FA8B8; --g5:#8A97A3;
     }
   }
   :root[data-theme="dark"]{
@@ -37,8 +43,9 @@
     --rule:#252D36; --rule-strong:#3A444F;
     --cap:#FF6A52; --mark:#8A99A8; --mark-soft:#8A99A840;
     --latent:#4FBDD0; --rain:#6FA3DC; --grid:#1D242C;
-    --t-KIA:#FF3A5E; --t-SSG:#D8465C; --t-LG:#F2599A; --t-키움:#C0708E; --t-한화:#FF9440;
-    --t-삼성:#4E9BF0; --t-롯데:#5B82C9; --t-두산:#8AA4E0; --t-NC:#3FC3CA; --t-KT:#9FA8B2;
+    --t-KIA:#EA0029; --t-SSG:#E21435; --t-LG:#E10644; --t-키움:#D4304E; --t-한화:#FC4E00;
+    --t-삼성:#1870DD; --t-롯데:#2F72CF; --t-두산:#6E69B8; --t-NC:#4971B3; --t-KT:#737373;
+    --g1:#FF5C42; --g2:#FF7A5C; --g3:#F2A65A; --g4:#7FA8B8; --g5:#8A97A3;
   }
 
   body{
@@ -71,8 +78,12 @@
   .game{background:var(--surface); padding:15px 14px 13px; box-shadow:0 0 0 1px var(--rule);}
   .game .where{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-3);
     letter-spacing:.04em;}
-  .game .teams{font-size:15.5px; font-weight:600; margin:5px 0 12px; letter-spacing:-.01em;}
+  .game .teams{font-size:15.5px; font-weight:600; margin:5px 0 10px; letter-spacing:-.01em;}
   .game .teams .at{color:var(--ink-3); font-weight:400; margin:0 5px;}
+  /* 큰 숫자가 무엇인지 카드 안에서 바로 읽히게 한다. 없으면 백분율이 좌석
+     점유율로 오해된다. */
+  .game .kind{font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:.06em;
+    color:var(--ink-3); display:block; margin-bottom:3px;}
   .game .prob{font-family:'IBM Plex Mono',monospace; font-variant-numeric:tabular-nums;
     font-size:30px; font-weight:600; line-height:1;}
   /* 오늘 카드는 사람 수가 주인공이라 자릿수가 길다. 한 줄에 들어가게 줄인다. */
@@ -249,7 +260,7 @@
 
   <section>
     <h2>수용인원은 고정값이 아니다</h2>
-    <p class="sub">모델을 세우기 전에 정리해야 할 것. 코로나 입장 제한이 2021년과 2022년을 눌렀고, 대전은 2025년에 신구장으로 옮겼으며, 사직과 창원은 해마다 좌석이 바뀐다. 상한이 움직이면 매진의 정의도 함께 움직인다.</p>
+    <p class="sub">모델을 세우기 전에 정리해야 할 것. 코로나 입장 제한이 2021년과 2022년을 눌렀고, 대전은 2025년에 신구장으로 옮겼으며, 사직과 창원은 해마다 좌석이 바뀐다. 상한이 움직이면 매진의 정의도 함께 움직인다. <strong style="color:var(--cap)">주황으로 강조한 칸</strong>이 직전 시즌과 좌석 수가 달라진 지점이다.</p>
     <p class="sortnote" id="tableSort"></p>
     <div class="scroller"><table id="capTable"></table></div>
   </section>
@@ -480,40 +491,60 @@
   // 두 섹션이 같은 모델의 다른 출력을 본다. mode 가 무엇을 크게 세울지 정한다.
   //   'prob'  아직 표를 살 수 있는 날 - 매진 확률이 답할 질문이다
   //   'crowd' 오늘 - 표는 이미 팔렸고 몇 명이 오느냐가 관심사다
+  // predict_today.py 의 GRADES 와 같은 경계다. 한쪽만 고치면 색과 말이 어긋난다.
+  function gradeColor(p){
+    return 'var(' + (p >= 0.8 ? '--g1' : p >= 0.6 ? '--g2' : p >= 0.4 ? '--g3'
+                     : p >= 0.2 ? '--g4' : '--g5') + ')';
+  }
+
+  // 팀명은 구단 대표색으로 쓴다. 변수가 없는 이름이 와도 본문 색으로 떨어지게 한다.
+  function teamInk(name){
+    return 'var(--t-' + name + ', var(--ink))';
+  }
+
   function gameCard(g, mode){
     var pct = Math.round(g.prob * 100);
     var fill = mode === 'crowd' ? Math.min(100, Math.round(g.expected / g.seats * 100)) : pct;
+    var tone = gradeColor(g.prob);
     // 날씨는 모델에 안 들어간다. 읽는 사람을 위한 곁들이라 예보가 있을 때만 붙인다.
     var wx = [];
     if (g.temp != null) wx.push(g.temp + '도');
     if (g.pop != null) wx.push('강수 ' + g.pop + '%');
 
-    var head, meta;
+    var kind, head, meta;
     if (mode === 'crowd') {
+      kind = '예상 관중';
       head = '<span class="prob count">' + fmt(g.expected) + '</span>' +
         '<span class="grade">좌석의 ' + fill + '%</span>';
       meta = '좌석 ' + fmt(g.seats) + ' / 수요 ' + fmt(g.latent) + '<br>' +
         '매진 확률 ' + pct + '%' + (wx.length ? ' · ' + wx.join(' ') : '');
     } else {
-      head = '<span class="prob">' + pct + '%</span>' +
-        '<span class="grade">' + esc(g.grade) + '</span>';
-      meta = '예상 ' + fmt(g.expected) + ' / 좌석 ' + fmt(g.seats) + '<br>' +
-        '수요 ' + fmt(g.latent) + (wx.length ? ' · ' + wx.join(' ') : '');
+      // 예매 난이도 카드에는 예상 관중을 넣지 않는다. 확률 옆에 사람 수가 있으면
+      // 백분율이 그 수에서 나온 비율로 읽힌다.
+      kind = '매진 확률';
+      head = '<span class="prob" style="color:' + tone + '">' + pct + '%</span>' +
+        '<span class="grade" style="color:' + tone + '">' + esc(g.grade) + '</span>';
+      meta = '수요 ' + fmt(g.latent) + ' / 좌석 ' + fmt(g.seats) +
+        (wx.length ? '<br>' + wx.join(' ') : '');
     }
+    var barColor = mode === 'crowd' ? 'var(--cap)' : tone;
     return '<div class="game">' +
       '<div class="where">' + esc(g.stadium) + ' · ' + esc(g.start) + '</div>' +
-      '<div class="teams">' + esc(g.away) + '<span class="at">vs</span>' + esc(g.home) + '</div>' +
-      '<div>' + head + '</div>' +
-      '<div class="bar"><i style="width:' + fill + '%"></i></div>' +
+      '<div class="teams">' +
+      '<span style="color:' + teamInk(g.away) + '">' + esc(g.away) + '</span>' +
+      '<span class="at">vs</span>' +
+      '<span style="color:' + teamInk(g.home) + '">' + esc(g.home) + '</span></div>' +
+      '<div><span class="kind">' + kind + '</span>' + head + '</div>' +
+      '<div class="bar"><i style="width:' + fill + '%;background:' + barColor + '"></i></div>' +
       '<div class="meta">' + meta +
       (g.note ? '<br><span class="cancel">' + esc(g.note) + '</span>' : '') +
       '</div></div>';
   }
 
   function renderNext(){
-    var N = D.next;
+    var N = D.forecast;
     var host = document.getElementById('nextSection');
-    // 시즌이 끝났거나 오늘 경기만 남았으면 접는다. 빈 표를 남기지 않는다.
+    // 시즌이 끝났거나 그 창에 경기가 없으면 접는다. 빈 표를 남기지 않는다.
     if(!N || !N.days || !N.days.length){ host.hidden = true; return; }
     host.hidden = false;
 
@@ -521,8 +552,10 @@
     document.getElementById('nextTitle').textContent =
       '예매 난이도 · ' + (first === last ? first : first + ' ~ ' + last);
     document.getElementById('nextSub').textContent =
-      '아직 표를 살 수 있는 경기다. ' + first + ' 이전 ' + fmt(N.trainN) +
-      '경기로 맞춘 검열 회귀가 낸 매진 확률이고, 날씨는 쓰지 않았다. ' +
+      '티켓이 대체로 경기 일주일 전에 열리므로 지금 막 예매창이 열리는 날짜만 놓았다. ' +
+      '그 사이 날짜는 이미 표가 풀려 있어 지금 결정할 것이 없다. ' +
+      '카드의 백분율은 그 경기가 매진될 확률이지 좌석이 얼마나 차는지가 아니다. ' +
+      fmt(N.trainN) + '경기로 맞춘 검열 회귀가 냈고 날씨는 쓰지 않았다. ' +
       '비는 당일 관중을 분명히 깎지만 미리 팔리는 표는 거의 바꾸지 않기 때문이다.';
 
     document.getElementById('nextDays').innerHTML = N.days.map(function(day){
@@ -536,12 +569,13 @@
     }).join('');
 
     document.getElementById('nextNote').textContent =
-      '수요가 좌석을 넘는 만큼이 표 구하기의 어려움이다. 예상 관중은 좌석에서 잘린 뒤의 값이라 ' +
-      '매진이 가까울수록 수요와 벌어진다. 먼 날일수록 순위와 연승이 그때까지 바뀌므로 확률이 흐려진다.';
+      '수요가 좌석을 넘는 만큼이 표 구하기의 어려움이다. 수요는 좌석 제약이 없었다면 몇 명이 ' +
+      '원했을지라서 좌석보다 클 수 있다. 일주일 뒤 경기라 순위와 연승이 그때까지 바뀌므로 ' +
+      '확률은 당일 예보보다 흐리다.';
   }
 
   function renderToday(){
-    var T = D.next && D.next.today;
+    var T = D.forecast && D.forecast.today;
     var host = document.getElementById('todaySection');
     // 오늘 경기가 없는 날이 흔하다. 그때는 이 섹션만 접고 위는 그대로 둔다.
     if(!T || !T.games || !T.games.length){ host.hidden = true; return; }

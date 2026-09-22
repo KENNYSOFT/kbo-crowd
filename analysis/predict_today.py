@@ -131,14 +131,16 @@ def resolve_target(date=None):
     return (later[0], True) if later else (None, True)
 
 
-def upcoming_dates(days, start=None):
-    """오늘(또는 start)부터 days 일 안에 열리는 경기일을 이른 순으로 준다.
+def upcoming_dates(days, start=None, lead=0):
+    """start 로부터 lead 일 뒤부터 days 일 치에 열리는 경기일을 이른 순으로 준다.
 
-    예매는 대체로 경기 일주일쯤 전에 열리므로, 표를 사려는 시점의 난이도를
-    보려면 다음 경기일 하나가 아니라 그 창 전체가 필요하다.
+    lead 를 두는 것은 예매가 대체로 경기 일주일쯤 전에 열리기 때문이다. 그
+    사이 날짜는 이미 표가 풀려 있어 '지금 사야 하나' 를 묻는 자리가 아니므로,
+    lead=7 로 창을 띄우면 지금 막 예매가 열리는 날짜만 남는다.
     """
-    first = start or dt.date.today().isoformat()
-    last = (dt.date.fromisoformat(first) + dt.timedelta(days=days - 1)).isoformat()
+    base = dt.date.fromisoformat(start or dt.date.today().isoformat())
+    first = (base + dt.timedelta(days=lead)).isoformat()
+    last = (base + dt.timedelta(days=lead + days - 1)).isoformat()
     schedule = data("schedule.csv")
     return sorted(d for d in schedule["date"].unique() if first <= d <= last)
 

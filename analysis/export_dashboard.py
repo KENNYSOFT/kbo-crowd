@@ -22,7 +22,7 @@ import pandas as pd
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import model
 from demand import team_effects
-from predict_today import grade, predict_games, resolve_target, upcoming_dates
+from predict_today import grade, predict_games, upcoming_dates
 from rain_price import rain_effect
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -95,25 +95,26 @@ def forecast_display():
     return {(r.stadium, r.date, str(r.hour).zfill(2)): r for r in fc.itertuples()}
 
 
-def upcoming_week(min_season, days=7):
-    """앞으로 열릴 경기를 두 갈래로 나눠 낸다. 화면 맨 위에 올릴 값이다.
+def forecast_sections(min_season, lead=7, span=2):
+    """화면 맨 위 두 절에 쓸 값을 낸다. 두 절이 묻는 것은 서로 다르다.
 
-    오늘 경기와 그 뒤의 경기는 묻는 것이 다르다. 오늘은 이미 예매가 끝났거나
-    당일권만 남아서 '표를 구할 수 있나' 를 물을 자리가 아니고, 그날 몇 명이
-    오느냐가 관심사다. 반대로 내일 이후는 아직 표를 살 수 있으니 매진 확률이
-    답할 질문이다. 그래서 오늘은 today 로, 내일부터는 days 로 갈라 둔다.
+    오늘 경기는 표가 이미 팔렸거나 당일권만 남아서 '구할 수 있나' 를 물을
+    자리가 아니고, 그날 몇 명이 오느냐가 관심사다. 반대로 지금 막 예매가
+    열리는 날짜는 아직 살 수 있으니 매진 확률이 답할 질문이다.
 
-    창을 일주일로 잡는 것은 예매가 대체로 경기 일주일쯤 전에 열리기 때문이다.
-    CLI 의 predict_today 와 같은 함수를 써서 두 화면의 숫자가 갈리지 않게 한다.
-    한 번의 학습으로 두 갈래를 모두 내므로 값이 서로 어긋날 수도 없다.
+    그 사이 날짜(내일부터 lead 일 전까지)는 넣지 않는다. 이미 표가 풀려 있어
+    지금 결정할 것이 없기 때문이다. 그래서 창은 오늘 하루와 lead 일 뒤부터
+    span 일이고, 기본값 7과 2는 티켓이 대체로 경기 일주일 전에 열리는 것을
+    따른 것이다.
 
-    예정 경기가 없거나(시즌 종료) 학습이 부족하면 None 이고, 화면은 그 섹션을
-    통째로 접는다.
+    CLI 의 predict_today 와 같은 함수를 쓰고 한 번의 학습으로 두 갈래를 모두
+    내므로 두 절의 숫자가 서로 어긋날 수 없다. 예정 경기가 없거나(시즌 종료)
+    학습이 부족하면 None 이고, 화면은 그 절을 통째로 접는다.
     """
-    target, _moved = resolve_target()
-    if target is None:
+    today = dt.date.today().isoformat()
+    dates = sorted(set(upcoming_dates(1, today) + upcoming_dates(span, today, lead=lead)))
+    if not dates:
         return None
-    dates = upcoming_dates(days, target) or [target]
     games, meta = predict_games(dates, min_season=min_season, weather=False)
     if games is None:
         return None
@@ -145,7 +146,6 @@ def upcoming_week(min_season, days=7):
             })
         grouped.append({"date": date, "dow": day["dow"].iloc[0], "games": rows})
 
-    today = dt.date.today().isoformat()
     today_block = grouped.pop(0) if grouped and grouped[0]["date"] == today else None
 
     return {
@@ -200,7 +200,7 @@ def main():
     )
 
     payload = {
-        "next": upcoming_week(args.min_season),
+        "forecast": forecast_sections(args.min_season),
         "rain": rain_summary(train),
         "generated": dt.datetime.now(dt.timezone(dt.timedelta(hours=9))).strftime("%Y-%m-%d %H:%M KST"),
         "lastGame": full["date"].max(),
