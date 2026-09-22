@@ -276,19 +276,29 @@
     <div class="scroller"><table id="capTable"></table></div>
   </section>
 
+  <section id="backtestSection" hidden>
+    <h2>이 모델이 얼마나 맞나</h2>
+    <p class="sub" id="backtestSub"></p>
+    <div class="cols">
+      <div><svg id="backtestChart" class="chart" role="img" aria-label="예상 관중과 실제 관중을 견준 산점도"></svg></div>
+      <div><dl class="kpis" id="backtestKpis" style="grid-template-columns:repeat(2,1fr)"></dl></div>
+    </div>
+    <p class="note" id="backtestNote"></p>
+  </section>
+
   <section style="border-bottom:none">
     <h2>여기서 이어갈 것</h2>
     <p class="sub">지금까지 재 본 것들이 남긴 다음 질문.</p>
     <div class="findings">
       <div class="finding"><span class="idx">01</span><div>
-        <h3>예보한 뒤에 맞혀보기</h3>
-        <p>오늘 내놓은 예상 관중은 다음 날이면 실제 집계와 나란히 놓을 수 있다. 그것을 쌓아 화면에 보이면 모델이 얼마나 맞는지 읽는 사람이 직접 판단한다. 지금은 검증 숫자가 스크립트 출력에만 있어 여기서는 믿어 달라고 말하는 셈이다.</p></div></div>
+        <h3>많이 빗나간 경기들의 공통점</h3>
+        <p>가장 크게 틀린 다섯 경기가 모두 예상보다 적게 온 쪽이고 그중 셋이 수원이다. 우연인지 그 구장에서 모델이 체계적으로 높게 보는지는 구장별로 오차의 부호를 갈라 보면 알 수 있다. 쏠림이 있다면 구장 효과가 시즌 안에서 움직인다는 뜻이다.</p></div></div>
       <div class="finding"><span class="idx">02</span><div>
-        <h3>일주일 전 예보의 흐림 줄이기</h3>
-        <p>순위와 연승을 7일 전 값으로 되돌리면 브라이어가 0.1595 에서 0.1746 으로 오른다. 그 사이 순위가 평균 2계단, 연승이 평균 3경기 움직이기 때문이다. 남은 일정으로 그 변화를 미리 재 넣으면 손실이 줄어드는지 볼 수 있다.</p></div></div>
+        <h3>매진의 정의를 흔들어 보기</h3>
+        <p>이 화면의 거의 모든 숫자가 좌석의 98% 이상을 매진으로 본다는 한 줄에 기대고 있다. 95%나 100%로 바꾸면 검열 비중과 잠재 수요 순위가 얼마나 달라지는지 봐야 그 선택이 결론을 만든 것인지 아닌지 말할 수 있다.</p></div></div>
       <div class="finding"><span class="idx">03</span><div>
-        <h3>센 비에도 여는 경기는 무엇이 다른가</h3>
-        <p>10mm 넘게 오는데도 열린 경기가 다섯 있고 그 점유율이 81%로 맑은 날보다 높다. 표본이 얇아 생긴 착시일 수도 있지만, 표가 많이 팔린 경기일수록 웬만하면 연다는 설명도 성립한다. 취소 여부를 매진 확률로 설명해 보면 둘을 가를 수 있다.</p></div></div>
+        <h3>취소된 경기는 어디로 다시 가나</h3>
+        <p>비로 날아간 경기는 나중에 다시 편성된다. 더블헤더 뒷경기나 시즌 막판 평일 낮처럼 원래보다 불리한 자리로 가는 일이 많은데, 그 경기들이 데이터에 섞여 있으면 수요 추정이 그만큼 눌린다. 일정에서 재편성 짝을 찾아 그 자리의 관중을 따로 볼 수 있다.</p></div></div>
     </div>
   </section>
 
@@ -763,6 +773,61 @@
     el.innerHTML = s.join('');
   }
 
+  // ---- 얼마나 맞나 ----
+  function renderBacktest(){
+    var B = D.backtest;
+    var host = document.getElementById('backtestSection');
+    if(!B || !B.points || !B.points.length){ host.hidden = true; return; }
+    host.hidden = false;
+
+    document.getElementById('backtestSub').textContent =
+      B.from + ' 부터 ' + B.to + ' 까지 ' + fmt(B.games) + '경기를 매주 다시 학습하며 맞혀 봤다. ' +
+      '그 주가 시작하기 전까지의 경기만 학습에 넣었으므로 맞힐 경기의 결과는 모르는 상태다. ' +
+      '한 번 맞춘 모델로 과거를 되짚으면 이미 배운 것을 다시 맞히는 셈이라 실제보다 잘 나온다.';
+
+    document.getElementById('backtestKpis').innerHTML = [
+      ['평균 오차', fmt(Math.round(B.mae)), '명'],
+      ['중앙값 오차', fmt(Math.round(B.medae)), '명'],
+      ['매진 맞힌 비율', (B.selloutHit * 100).toFixed(0), '%'],
+      ['좌석 대비 오차', (B.maeSeat * 100).toFixed(1), '%']
+    ].map(function(k){
+      return '<div class="kpi"><dt>' + k[0] + '</dt><dd>' + k[1] +
+        '<small>' + k[2] + '</small></dd></div>';
+    }).join('');
+
+    // 산점도. 대각선에 붙을수록 잘 맞은 것이고, 매진 경기가 좌석 쪽 벽에
+    // 늘어서는 모양이 이 화면 전체가 말해 온 검열이다.
+    var pts = B.points;
+    var top = 0;
+    pts.forEach(function(p){ top = Math.max(top, p[0], p[1]); });
+    top = Math.ceil(top / 5000) * 5000;
+    var padL=52, padR=14, padT=26, padB=44, W=430, H=430;
+    var xs = function(v){ return padL + v / top * (W - padL - padR); };
+    var ys = function(v){ return H - padB - v / top * (H - padT - padB); };
+    var s = ['<text class="ax" x="'+padL+'" y="'+(padT-12)+'">세로 실제 관중, 가로 예상 관중</text>'];
+    for(var t = 0; t <= top; t += 10000){
+      s.push('<line class="gridline" x1="'+padL+'" y1="'+ys(t).toFixed(1)+'" x2="'+(W-padR)+'" y2="'+ys(t).toFixed(1)+'"/>');
+      s.push('<text class="ax" x="'+(padL-8)+'" y="'+(ys(t)+3.5).toFixed(1)+'" text-anchor="end">'+(t/1000)+'천</text>');
+      s.push('<text class="ax" x="'+xs(t).toFixed(1)+'" y="'+(H-padB+16)+'" text-anchor="middle">'+(t/1000)+'천</text>');
+    }
+    s.push('<line x1="'+xs(0)+'" y1="'+ys(0)+'" x2="'+xs(top)+'" y2="'+ys(top)+
+           '" stroke="var(--rule-strong)" stroke-width="1.5" stroke-dasharray="4 3"/>');
+    pts.forEach(function(p){
+      s.push('<circle cx="'+xs(p[0]).toFixed(1)+'" cy="'+ys(p[1]).toFixed(1)+'" r="2.6" fill="'+
+             (p[2] ? 'var(--cap)' : 'var(--mark)')+'" opacity="'+(p[2] ? 0.7 : 0.4)+'"/>');
+    });
+    var chart = document.getElementById('backtestChart');
+    chart.setAttribute('viewBox', '0 0 '+W+' '+H);
+    chart.innerHTML = s.join('');
+
+    document.getElementById('backtestNote').textContent =
+      '점선이 완벽히 맞은 자리다. 붉은 점이 매진 경기인데 위쪽에 가로로 늘어서는 것은 ' +
+      '실제 관중이 좌석에서 멈추기 때문이다. 예측이 실제보다 큰 경우가 ' +
+      Math.round(B.over * 100) + '% 라 한쪽으로 쏠리지는 않았다. ' +
+      '브라이어 ' + B.brier.toFixed(4) + ' 는 매진 확률이 얼마나 잘 보정됐는지를 재는 값으로, ' +
+      '늘 평균만 찍을 때(0.23)보다 낮을수록 좋다.';
+  }
+
   // ---- 수용인원 표 ----
   function renderCapTable(){
     var caps = {}, counts = {};
@@ -818,6 +883,7 @@
   renderRain();
   renderPower('homePower', M.homePower, '홈 티켓 파워 (평균 = 1.00)');
   renderPower('awayPower', M.awayPower, '원정 티켓 파워 (평균 = 1.00)');
+  renderBacktest();
   renderCapTable();
 })();
 </script>

@@ -21,6 +21,7 @@ import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import model
+from backtest import summary, walk_forward
 from demand import team_effects
 from predict_today import grade, predict_games, upcoming_dates
 from rain_price import BANDS, BAND_LABELS, rain_effect, scheduled_with_rain
@@ -115,6 +116,27 @@ def rain_bands(min_season, keep_march=False):
     wet = sch[sch["rain"] > 0]
     return {"rows": rows, "wetGames": int(len(wet)),
             "wetCancelled": int(wet["cancelled"].sum())}
+
+
+def backtest_payload(min_season, start="2026-05-01"):
+    """예측과 실제를 같은 자리에 놓은 결과를 화면에 넘긴다.
+
+    산점도에 쓸 좌표만 보낸다. 경기별 이름까지 실으면 payload 가 커지는데,
+    여기서 읽을 것은 점들이 대각선에 얼마나 붙어 있는가이지 어느 경기인지가
+    아니다. 다만 매진 여부는 남긴다. 그 점들이 좌석 쪽 벽에 붙어 서는 모양이
+    이 프로젝트가 처음부터 말하던 검열이기 때문이다.
+    """
+    out = walk_forward(min_season, start)
+    if out.empty:
+        return None
+    s = summary(out)
+    s["points"] = [[int(round(r.predicted)), int(r.actual), int(r.soldOut), int(r.seats)]
+                   for r in out.itertuples()]
+    s["mae"] = round(s["mae"], 1)
+    s["medae"] = round(s["medae"], 1)
+    for key in ["maeSeat", "selloutHit", "brier", "over"]:
+        s[key] = round(s[key], 4)
+    return s
 
 
 def forecast_display():
@@ -240,6 +262,7 @@ def main():
         "forecast": forecast_sections(args.min_season),
         "rain": rain_summary(train),
         "rainBands": rain_bands(args.min_season),
+        "backtest": backtest_payload(args.min_season),
         "generated": dt.datetime.now(dt.timezone(dt.timedelta(hours=9))).strftime("%Y-%m-%d %H:%M KST"),
         "lastGame": full["date"].max(),
         "seasons": seasons,
