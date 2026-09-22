@@ -75,6 +75,8 @@
   .game .teams .at{color:var(--ink-3); font-weight:400; margin:0 5px;}
   .game .prob{font-family:'IBM Plex Mono',monospace; font-variant-numeric:tabular-nums;
     font-size:30px; font-weight:600; line-height:1;}
+  /* 오늘 카드는 사람 수가 주인공이라 자릿수가 길다. 한 줄에 들어가게 줄인다. */
+  .game .prob.count{font-size:26px;}
   .game .grade{font-size:12.5px; color:var(--ink-2); margin-left:7px;}
   .game .bar{height:4px; background:var(--grid); margin:9px 0 9px;}
   .game .bar i{display:block; height:100%; background:var(--cap);}
@@ -164,10 +166,17 @@
   </header>
 
   <section id="nextSection" class="next" hidden>
-    <h2 id="nextTitle">앞으로 일주일</h2>
+    <h2 id="nextTitle">예매 난이도</h2>
     <p class="sub" id="nextSub"></p>
     <div id="nextDays"></div>
     <p class="note" id="nextNote"></p>
+  </section>
+
+  <section id="todaySection" class="next" hidden>
+    <h2 id="todayTitle">오늘 관중</h2>
+    <p class="sub" id="todaySub"></p>
+    <div class="next-grid" id="todayGrid"></div>
+    <p class="note" id="todayNote"></p>
   </section>
 
   <div class="controls">
@@ -468,19 +477,35 @@
     return diff === 0 ? '오늘' : diff === 1 ? '내일' : diff === 2 ? '모레' : null;
   }
 
-  function gameCard(g){
+  // 두 섹션이 같은 모델의 다른 출력을 본다. mode 가 무엇을 크게 세울지 정한다.
+  //   'prob'  아직 표를 살 수 있는 날 - 매진 확률이 답할 질문이다
+  //   'crowd' 오늘 - 표는 이미 팔렸고 몇 명이 오느냐가 관심사다
+  function gameCard(g, mode){
     var pct = Math.round(g.prob * 100);
-    // 날씨는 모델에 안 들어간다. 표를 이미 쥔 사람을 위한 곁들이라 예보가 있을 때만 붙인다.
+    var fill = mode === 'crowd' ? Math.min(100, Math.round(g.expected / g.seats * 100)) : pct;
+    // 날씨는 모델에 안 들어간다. 읽는 사람을 위한 곁들이라 예보가 있을 때만 붙인다.
     var wx = [];
     if (g.temp != null) wx.push(g.temp + '도');
     if (g.pop != null) wx.push('강수 ' + g.pop + '%');
+
+    var head, meta;
+    if (mode === 'crowd') {
+      head = '<span class="prob count">' + fmt(g.expected) + '</span>' +
+        '<span class="grade">좌석의 ' + fill + '%</span>';
+      meta = '좌석 ' + fmt(g.seats) + ' / 수요 ' + fmt(g.latent) + '<br>' +
+        '매진 확률 ' + pct + '%' + (wx.length ? ' · ' + wx.join(' ') : '');
+    } else {
+      head = '<span class="prob">' + pct + '%</span>' +
+        '<span class="grade">' + esc(g.grade) + '</span>';
+      meta = '예상 ' + fmt(g.expected) + ' / 좌석 ' + fmt(g.seats) + '<br>' +
+        '수요 ' + fmt(g.latent) + (wx.length ? ' · ' + wx.join(' ') : '');
+    }
     return '<div class="game">' +
       '<div class="where">' + esc(g.stadium) + ' · ' + esc(g.start) + '</div>' +
       '<div class="teams">' + esc(g.away) + '<span class="at">vs</span>' + esc(g.home) + '</div>' +
-      '<div><span class="prob">' + pct + '%</span><span class="grade">' + esc(g.grade) + '</span></div>' +
-      '<div class="bar"><i style="width:' + pct + '%"></i></div>' +
-      '<div class="meta">예상 ' + fmt(g.expected) + ' / 좌석 ' + fmt(g.seats) + '<br>' +
-      '수요 ' + fmt(g.latent) + (wx.length ? ' · ' + wx.join(' ') : '') +
+      '<div>' + head + '</div>' +
+      '<div class="bar"><i style="width:' + fill + '%"></i></div>' +
+      '<div class="meta">' + meta +
       (g.note ? '<br><span class="cancel">' + esc(g.note) + '</span>' : '') +
       '</div></div>';
   }
@@ -488,16 +513,16 @@
   function renderNext(){
     var N = D.next;
     var host = document.getElementById('nextSection');
-    // 시즌이 끝났거나 학습이 모자라면 섹션을 접는다. 빈 표를 남기지 않는다.
+    // 시즌이 끝났거나 오늘 경기만 남았으면 접는다. 빈 표를 남기지 않는다.
     if(!N || !N.days || !N.days.length){ host.hidden = true; return; }
     host.hidden = false;
 
     var first = N.days[0].date, last = N.days[N.days.length - 1].date;
     document.getElementById('nextTitle').textContent =
-      (first === last ? first : first + ' ~ ' + last) + ' 티켓 난이도';
+      '예매 난이도 · ' + (first === last ? first : first + ' ~ ' + last);
     document.getElementById('nextSub').textContent =
-      first + ' 이전 ' + fmt(N.trainN) + '경기로 맞춘 검열 회귀가 낸 매진 확률이다. ' +
-      '예매가 대체로 경기 일주일쯤 전에 열리므로 그 창 전체를 본다. 날씨는 쓰지 않았다. ' +
+      '아직 표를 살 수 있는 경기다. ' + first + ' 이전 ' + fmt(N.trainN) +
+      '경기로 맞춘 검열 회귀가 낸 매진 확률이고, 날씨는 쓰지 않았다. ' +
       '비는 당일 관중을 분명히 깎지만 미리 팔리는 표는 거의 바꾸지 않기 때문이다.';
 
     document.getElementById('nextDays').innerHTML = N.days.map(function(day){
@@ -505,13 +530,35 @@
       return '<div class="next-day">' +
         '<h3>' + esc(day.date) + ' ' + esc(day.dow) +
         (rel ? '<span class="rel">' + rel + '</span>' : '') + '</h3>' +
-        '<div class="next-grid">' + day.games.map(gameCard).join('') + '</div>' +
-        '</div>';
+        '<div class="next-grid">' +
+        day.games.map(function(g){ return gameCard(g, 'prob'); }).join('') +
+        '</div></div>';
     }).join('');
 
     document.getElementById('nextNote').textContent =
       '수요가 좌석을 넘는 만큼이 표 구하기의 어려움이다. 예상 관중은 좌석에서 잘린 뒤의 값이라 ' +
       '매진이 가까울수록 수요와 벌어진다. 먼 날일수록 순위와 연승이 그때까지 바뀌므로 확률이 흐려진다.';
+  }
+
+  function renderToday(){
+    var T = D.next && D.next.today;
+    var host = document.getElementById('todaySection');
+    // 오늘 경기가 없는 날이 흔하다. 그때는 이 섹션만 접고 위는 그대로 둔다.
+    if(!T || !T.games || !T.games.length){ host.hidden = true; return; }
+    host.hidden = false;
+
+    document.getElementById('todayTitle').textContent =
+      '오늘 관중 · ' + T.date + ' ' + T.dow;
+    document.getElementById('todaySub').textContent =
+      '오늘 경기는 표가 이미 팔렸거나 당일권만 남아서, 물을 것이 표를 구할 수 있느냐가 ' +
+      '아니라 몇 명이 오느냐다. 같은 모델의 다른 출력이라 위 확률과 어긋나지 않는다.';
+
+    document.getElementById('todayGrid').innerHTML =
+      T.games.map(function(g){ return gameCard(g, 'crowd'); }).join('');
+
+    document.getElementById('todayNote').textContent =
+      '예상 관중은 좌석에서 잘린 뒤의 값이다. 수요가 좌석을 크게 넘는 경기는 예상이 좌석에 붙어 ' +
+      '더 올라가지 않으므로, 그 차이는 매진 확률로 읽어야 한다.';
   }
 
   // ---- 비 ----
@@ -668,6 +715,7 @@
 
   renderAll();
   renderNext();
+  renderToday();
   renderDemand();
   renderRain();
   renderPower('homePower', M.homePower, '홈 티켓 파워 (평균 = 1.00)');

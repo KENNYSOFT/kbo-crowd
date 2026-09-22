@@ -96,12 +96,19 @@ def forecast_display():
 
 
 def upcoming_week(min_season, days=7):
-    """앞으로 일주일치 예측. 화면 맨 위에 올릴 값이다.
+    """앞으로 열릴 경기를 두 갈래로 나눠 낸다. 화면 맨 위에 올릴 값이다.
 
-    다음 경기일 하나가 아니라 창 전체를 보는 것은 예매가 대체로 경기 일주일쯤
-    전에 열리기 때문이다. CLI 의 predict_today 와 같은 함수를 써서 두 화면의
-    숫자가 갈리지 않게 한다. 예정 경기가 없거나(시즌 종료) 학습이 부족하면
-    None 이고, 화면은 그 섹션을 통째로 접는다.
+    오늘 경기와 그 뒤의 경기는 묻는 것이 다르다. 오늘은 이미 예매가 끝났거나
+    당일권만 남아서 '표를 구할 수 있나' 를 물을 자리가 아니고, 그날 몇 명이
+    오느냐가 관심사다. 반대로 내일 이후는 아직 표를 살 수 있으니 매진 확률이
+    답할 질문이다. 그래서 오늘은 today 로, 내일부터는 days 로 갈라 둔다.
+
+    창을 일주일로 잡는 것은 예매가 대체로 경기 일주일쯤 전에 열리기 때문이다.
+    CLI 의 predict_today 와 같은 함수를 써서 두 화면의 숫자가 갈리지 않게 한다.
+    한 번의 학습으로 두 갈래를 모두 내므로 값이 서로 어긋날 수도 없다.
+
+    예정 경기가 없거나(시즌 종료) 학습이 부족하면 None 이고, 화면은 그 섹션을
+    통째로 접는다.
     """
     target, _moved = resolve_target()
     if target is None:
@@ -138,9 +145,13 @@ def upcoming_week(min_season, days=7):
             })
         grouped.append({"date": date, "dow": day["dow"].iloc[0], "games": rows})
 
+    today = dt.date.today().isoformat()
+    today_block = grouped.pop(0) if grouped and grouped[0]["date"] == today else None
+
     return {
-        "from": meta["dates"][0],
-        "to": meta["dates"][-1],
+        "today": today_block,
+        "from": grouped[0]["date"] if grouped else None,
+        "to": grouped[-1]["date"] if grouped else None,
         "trainN": meta["train"],
         "days": grouped,
     }

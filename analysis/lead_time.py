@@ -145,7 +145,18 @@ def when_does_rain_work(df):
               % (len(dome), len(wet), wet["sold_out"].mean() * 100, dry["sold_out"].mean() * 100))
 
 
-def does_weather_help(df, cut):
+def fit_and_predict(train, test, weather):
+    """학습해서 매진 확률과 예상 관중 수를 함께 돌려준다."""
+    X = model.design_matrix(train, weather=weather)
+    fit = model.fit_tobit(X.values, train["log_crowd"].values, train["log_cap"].values)
+    ref = [c for c in X.columns if c != "const"]
+    Xt = model.design_matrix(test, weather=weather, reference=ref)
+    log_cap = np.log(test["capacity"].values)
+    return (model.sellout_probability(fit, Xt.values, log_cap),
+            np.exp(model.expected_observed(fit, Xt.values, log_cap)))
+
+
+def weather_on_sellout(df, cut):
     """날씨를 넣으면 매진 예측이 나아지는지 본다.
 
     검증에 쓰는 날씨는 실제 관측값이다. 즉 예보가 100% 맞았을 때의 상한을
@@ -156,15 +167,53 @@ def does_weather_help(df, cut):
     print("=== 날씨를 알면 매진 예측이 나아지나 (%s 이후 %d경기) ===" % (cut, len(test)))
     print("  %-22s %9s %9s %7s" % ("", "브라이어", "로그손실", "AUC"))
     for label, weather in [("날씨 없음", False), ("날씨 있음(완벽 예보)", True)]:
-        X = model.design_matrix(train, weather=weather)
-        fit = model.fit_tobit(X.values, train["log_crowd"].values, train["log_cap"].values)
-        ref = [c for c in X.columns if c != "const"]
-        Xt = model.design_matrix(test, weather=weather, reference=ref)
-        p = model.sellout_probability(fit, Xt.values, np.log(test["capacity"].values))
-        print("  %-22s %9.4f %9.4f %7.3f" % ((label,) + scores(p, y)))
+        prob, _crowd = fit_and_predict(train, test, weather)
+        print("  %-22s %9.4f %9.4f %7.3f" % ((label,) + scores(prob, y)))
     brier, logloss, _ = scores(np.full(len(y), train["sold_out"].mean()), y)
     print("  %-22s %9.4f %9.4f %7s" % ("(기준선: 평균으로 찍기)", brier, logloss, "-"))
     print("  완벽한 예보로도 나아지지 않으면, 부정확한 실제 예보는 볼 것도 없다.")
+
+
+def weather_on_crowd(df, cuts):
+    """관중 수 예측 쪽도 같은 질문을 던진다. 단 여러 구간으로 본다.
+
+    매진은 좌석을 넘느냐 마느냐라 비가 와도 이미 팔린 표가 지켜 주지만, 관중
+    수는 당일 판매가 줄면 그대로 깎인다. 그래서 여기서는 날씨가 쓸모 있을
+    법한데, 실제로는 구간마다 부호가 바뀐다.
+
+    구간을 하나만 재면 안 되는 이유가 이것이다. 비 온 경기가 구간당 열댓
+    건뿐이라 한 구간에서 20% 넘게 나아 보이다가 다른 구간에서는 30% 넘게
+    나빠진다. 그런 진동은 배운 것이 아니라 표본이 작다는 뜻이다.
+    """
+    print("=== 날씨를 알면 관중 수 예측이 나아지나 (비 온 경기의 평균 절대오차) ===")
+    print("  %-12s %5s %5s %10s %10s %8s" % ("검증 시작", "경기", "비", "날씨 없음", "날씨 있음", "개선"))
+    total = {"n": 0, "without": 0.0, "with": 0.0}
+    for cut in cuts:
+        train = df[df["date"] < cut]
+        # 한 시즌 안에서만 본다. 다음 시즌이 섞이면 학습에 없던 시즌을 예측하게 된다.
+        end = "%d-01-01" % (int(cut[:4]) + 1)
+        test = df[(df["date"] >= cut) & (df["date"] < end)]
+        if len(test) < 60 or len(train) < 300:
+            continue
+        wet = test["wet"].values
+        if wet.sum() < 5:
+            continue
+        errors = []
+        for weather in [False, True]:
+            _prob, crowd = fit_and_predict(train, test, weather)
+            errors.append(np.abs(crowd - test["crowd"].values)[wet].mean())
+        total["n"] += int(wet.sum())
+        total["without"] += errors[0] * wet.sum()
+        total["with"] += errors[1] * wet.sum()
+        print("  %-12s %5d %5d %10.0f %10.0f %7.1f%%"
+              % (cut, len(test), wet.sum(), errors[0], errors[1],
+                 (errors[0] - errors[1]) / errors[0] * 100))
+    if total["n"]:
+        without, with_ = total["without"] / total["n"], total["with"] / total["n"]
+        print("  %-12s %5s %5d %10.0f %10.0f %7.1f%%"
+              % ("가중 평균", "", total["n"], without, with_,
+                 (without - with_) / without * 100))
+    print("  부호가 구간마다 뒤집히면 그것은 효과가 아니라 잡음이다.")
 
 
 def how_early(df, cut, days_list):
@@ -207,7 +256,10 @@ def main():
 
     when_does_rain_work(df)
     print()
-    does_weather_help(df, args.holdout_from)
+    weather_on_sellout(df, args.holdout_from)
+    print()
+    weather_on_crowd(df, ["2025-06-01", "2025-08-01", "2026-05-01",
+                          "2026-06-01", "2026-07-01", "2026-08-01"])
     print()
     how_early(df, args.holdout_from, [0, 3, 7, 14])
 
