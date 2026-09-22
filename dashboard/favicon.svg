@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="야구공">
+  <title>KBO 관중 해부</title>
+  <!-- 탭 배경이 밝든 어둡든 보이게 흰 공에 짙은 테두리를 두른다. -->
+  <circle cx="16" cy="16" r="14.3" fill="#FFFFFF" stroke="#121820" stroke-width="2"/>
+  <!-- 실밥. 16px 로 줄면 바느질 자국은 뭉개지므로 곡선 두 줄만 남긴다.
+       색은 이 사이트가 쓰는 빨강과 같은 값이다. -->
+  <g fill="none" stroke="#D93F2B" stroke-width="2.7" stroke-linecap="round">
+    <path d="M7.2 6Q14 16 7.2 26"/>
+    <path d="M24.8 6Q18 16 24.8 26"/>
+  </g>
+</svg>
