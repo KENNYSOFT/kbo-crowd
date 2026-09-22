@@ -231,8 +231,19 @@
     <p class="note">원정 효과는 요일과 구장과 상대 홈팀을 통제한 뒤의 값이다. 같은 구장에 누가 찾아오느냐에 따라 수요가 두 배 가까이 갈린다.</p>
   </section>
 
+  <section id="rainBandSection" hidden>
+    <h2>비의 값은 대부분 취소에 있다</h2>
+    <p class="sub" id="rainBandSub"></p>
+    <div><svg id="rainBandChart" class="chart" role="img" aria-label="강수 구간별 열린 경기 점유율과 편성당 기대 점유율"></svg></div>
+    <div class="legend">
+      <span><i class="swatch" style="background:var(--mark)"></i>경기가 열렸을 때의 점유율</span>
+      <span><i class="swatch" style="background:var(--rain)"></i>편성 한 경기당 기대 점유율</span>
+    </div>
+    <p class="note" id="rainBandNote"></p>
+  </section>
+
   <section id="rainSection" hidden>
-    <h2>비의 값은 지붕이 정한다</h2>
+    <h2>열린 경기 안에서는 지붕이 정한다</h2>
     <p class="sub">경기 시간대에 비가 오면 야외 구장의 수요가 눈에 띄게 준다. 그런데 <strong>고척은 줄지 않는다.</strong> 오가는 길의 날씨가 원인이었다면 지붕이 있어도 같이 줄어야 하니, 남는 설명은 경기가 취소될지 모른다는 불확실성과 야외에서 비를 맞는 것이다.</p>
     <div class="cols">
       <div><svg id="rainShelter" class="chart" role="img" aria-label="지붕 유무별 비 온 날과 안 온 날의 점유율"></svg></div>
@@ -273,11 +284,11 @@
         <h3>예보한 뒤에 맞혀보기</h3>
         <p>오늘 내놓은 예상 관중은 다음 날이면 실제 집계와 나란히 놓을 수 있다. 그것을 쌓아 화면에 보이면 모델이 얼마나 맞는지 읽는 사람이 직접 판단한다. 지금은 검증 숫자가 스크립트 출력에만 있어 여기서는 믿어 달라고 말하는 셈이다.</p></div></div>
       <div class="finding"><span class="idx">02</span><div>
-        <h3>센 비는 표본에서 통째로 빠진다</h3>
-        <p>우천취소 경기는 관중 기록에 아예 없다. 2023년 이후 편성 3,197경기 중 249경기가 그렇게 사라졌다. 그 빠짐이 무작위가 아닌 것이 문제다. 취소된 날의 경기 시간대 강수는 평균 7.1mm 인데 비가 오고도 열린 경기는 1.8mm 다. 남아 있는 비 온 경기는 약한 비뿐이라, 지금 재고 있는 비의 값은 실제 크기의 하한이다.</p></div></div>
-      <div class="finding"><span class="idx">03</span><div>
         <h3>일주일 전 예보의 흐림 줄이기</h3>
         <p>순위와 연승을 7일 전 값으로 되돌리면 브라이어가 0.1595 에서 0.1746 으로 오른다. 그 사이 순위가 평균 2계단, 연승이 평균 3경기 움직이기 때문이다. 남은 일정으로 그 변화를 미리 재 넣으면 손실이 줄어드는지 볼 수 있다.</p></div></div>
+      <div class="finding"><span class="idx">03</span><div>
+        <h3>센 비에도 여는 경기는 무엇이 다른가</h3>
+        <p>10mm 넘게 오는데도 열린 경기가 다섯 있고 그 점유율이 81%로 맑은 날보다 높다. 표본이 얇아 생긴 착시일 수도 있지만, 표가 많이 팔린 경기일수록 웬만하면 연다는 설명도 성립한다. 취소 여부를 매진 확률로 설명해 보면 둘을 가를 수 있다.</p></div></div>
     </div>
   </section>
 
@@ -596,6 +607,58 @@
   }
 
   // ---- 비 ----
+  // 강수 구간마다 경기가 열릴 확률과 그때의 점유율을 함께 놓는다. 둘의 차이가
+  // 취소로 사라진 몫이고, 관중 기록만 보면 그 몫이 통째로 안 보인다.
+  function renderRainBands(){
+    var B = D.rainBands;
+    var host = document.getElementById('rainBandSection');
+    if(!B || !B.rows || B.rows.length < 2){ host.hidden = true; return; }
+    host.hidden = false;
+
+    var rows = B.rows, dry = rows[0];
+    document.getElementById('rainBandSub').innerHTML =
+      '비가 온 편성 ' + fmt(B.wetGames) + '경기 중 <strong>' + fmt(B.wetCancelled) +
+      '경기(' + Math.round(B.wetCancelled / B.wetGames * 100) + '%)가 취소</strong>되어 ' +
+      '관중 기록에 아예 없다. 그래서 기록에 남은 경기만 보면 비가 거의 보이지 않는다. ' +
+      '표를 사려던 사람이 실제로 겪는 것은 <strong>그날 경기를 볼 수 있었는가</strong>까지 ' +
+      '포함한 값이라, 취소를 관중 0 으로 놓고 편성 한 경기당 평균을 다시 냈다.';
+
+    var padL=44, padR=14, padT=26, padB=64, W=560, H=310;
+    var gw = (W-padL-padR)/rows.length;
+    var ys = function(v){ return H-padB - v*(H-padT-padB); };
+    var s = ['<text class="ax" x="'+padL+'" y="'+(padT-12)+'">평균 좌석 점유율</text>'];
+    [0,0.25,0.5,0.75,1].forEach(function(t){
+      s.push('<line class="gridline" x1="'+padL+'" y1="'+ys(t).toFixed(1)+'" x2="'+(W-padR)+'" y2="'+ys(t).toFixed(1)+'"/>');
+      s.push('<text class="ax" x="'+(padL-8)+'" y="'+(ys(t)+3.5).toFixed(1)+'" text-anchor="end">'+(t*100)+'%</text>');
+    });
+    rows.forEach(function(x, i){
+      var cx = padL + i*gw + gw/2, w = Math.min(34, gw*0.3);
+      [[x.openOcc,'var(--mark)',-w-3], [x.expectedOcc,'var(--rain)',3]].forEach(function(b){
+        s.push('<rect x="'+(cx+b[2]).toFixed(1)+'" y="'+ys(b[0]).toFixed(1)+'" width="'+w.toFixed(1)+
+               '" height="'+(H-padB-ys(b[0])).toFixed(1)+'" fill="'+b[1]+'" opacity="0.85"/>');
+        s.push('<text class="lab-s" x="'+(cx+b[2]+w/2).toFixed(1)+'" y="'+(ys(b[0])-5).toFixed(1)+
+               '" text-anchor="middle">'+(b[0]*100).toFixed(0)+'</text>');
+      });
+      s.push('<text class="lab" x="'+cx.toFixed(1)+'" y="'+(H-padB+20)+'" text-anchor="middle">'+esc(x.label)+'</text>');
+      s.push('<text class="ax" x="'+cx.toFixed(1)+'" y="'+(H-padB+34)+'" text-anchor="middle">편성 '+x.games+'</text>');
+      s.push('<text class="lab-s" x="'+cx.toFixed(1)+'" y="'+(H-padB+48)+'" text-anchor="middle" fill="var(--cap)">취소 '+
+             Math.round(x.cancelRate*100)+'%</text>');
+      if(i > 0){
+        s.push('<text class="lab-s" x="'+cx.toFixed(1)+'" y="'+(H-padB+61)+'" text-anchor="middle" fill="var(--rain)">'+
+               ((x.expectedOcc/dry.expectedOcc-1)*100).toFixed(0)+'%</text>');
+      }
+    });
+    document.getElementById('rainBandChart').setAttribute('viewBox','0 0 '+W+' '+H);
+    document.getElementById('rainBandChart').innerHTML = s.join('');
+
+    var thin = rows.filter(function(x){ return x.opened < 20; }).length;
+    document.getElementById('rainBandNote').textContent =
+      '왼쪽 막대는 경기가 열렸을 때의 점유율이라 비가 세져도 내려가지 않는다. ' +
+      (thin ? '센 비 구간에 열린 경기가 스무 건도 안 되기 때문이기도 하고, ' : '') +
+      '표가 많이 팔린 경기일수록 웬만하면 열기 때문이기도 하다. ' +
+      '오른쪽 막대가 취소까지 담은 값이고, 맨 아래 숫자는 비가 안 온 날 대비 변화다.';
+  }
+
   function renderRain(){
     var R = D.rain;
     var host = document.getElementById('rainSection');
@@ -751,6 +814,7 @@
   renderNext();
   renderToday();
   renderDemand();
+  renderRainBands();
   renderRain();
   renderPower('homePower', M.homePower, '홈 티켓 파워 (평균 = 1.00)');
   renderPower('awayPower', M.awayPower, '원정 티켓 파워 (평균 = 1.00)');

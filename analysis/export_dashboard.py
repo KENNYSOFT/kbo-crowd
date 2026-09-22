@@ -23,7 +23,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import model
 from demand import team_effects
 from predict_today import grade, predict_games, upcoming_dates
-from rain_price import rain_effect
+from rain_price import BANDS, BAND_LABELS, rain_effect, scheduled_with_rain
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DOW_ORDER = ["월", "화", "수", "목", "금", "토", "일"]
@@ -78,6 +78,43 @@ def rain_summary(df):
                            "sellout": round(float(subset["sold_out"].mean()), 4)})
 
     return {"shelter": shelter, "effects": effects, "timing": timing, "n": len(d)}
+
+
+def rain_bands(min_season, keep_march=False):
+    """강수 구간마다 경기가 열릴 확률과 그때의 점유율을 함께 낸다.
+
+    관중 기록만 보면 비의 큰 몫이 안 보인다. 비가 셀수록 경기가 아예 취소되어
+    그 경기가 표에서 통째로 빠지기 때문이다. 그래서 일정에서 출발해 취소를
+    관중 0 으로 놓고 편성 한 경기당 기대 점유율을 낸다.
+    """
+    sch = scheduled_with_rain(min_season, keep_march)
+    if sch.empty:
+        return None
+    sch = sch.copy()
+    sch["band"] = pd.cut(sch["rain"], bins=BANDS, labels=BAND_LABELS)
+
+    rows = []
+    for band, g in sch.groupby("band", observed=True):
+        opened = g[~g["cancelled"] & g["occupancy"].notna()]
+        if not len(opened):
+            continue
+        rate = float(g["cancelled"].mean())
+        occ = float(opened["occupancy"].mean())
+        rows.append({
+            "label": str(band),
+            "games": int(len(g)),
+            "cancelled": int(g["cancelled"].sum()),
+            "cancelRate": round(rate, 4),
+            "opened": int(len(opened)),
+            "openOcc": round(occ, 4),
+            "expectedOcc": round((1 - rate) * occ, 4),
+        })
+    if len(rows) < 2:
+        return None
+
+    wet = sch[sch["rain"] > 0]
+    return {"rows": rows, "wetGames": int(len(wet)),
+            "wetCancelled": int(wet["cancelled"].sum())}
 
 
 def forecast_display():
@@ -202,6 +239,7 @@ def main():
     payload = {
         "forecast": forecast_sections(args.min_season),
         "rain": rain_summary(train),
+        "rainBands": rain_bands(args.min_season),
         "generated": dt.datetime.now(dt.timezone(dt.timedelta(hours=9))).strftime("%Y-%m-%d %H:%M KST"),
         "lastGame": full["date"].max(),
         "seasons": seasons,
