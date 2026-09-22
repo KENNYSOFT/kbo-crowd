@@ -60,9 +60,15 @@
   section.next{padding-block:28px 32px; border-bottom:2px solid var(--ink);}
   .next h2{margin-bottom:4px;}
   .next .sub{margin-bottom:16px;}
+  /* 날마다 경기 수가 달라 마지막 줄이 빈다. 격자 배경 대신 카드마다 선을 둘러
+     빈 칸이 회색으로 드러나지 않게 한다. */
   .next-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(196px,1fr));
-    gap:1px; background:var(--rule); border:1px solid var(--rule);}
-  .game{background:var(--surface); padding:15px 14px 13px;}
+    gap:1px; background:var(--surface); border:1px solid var(--rule);}
+  .next-day{margin-bottom:16px;}
+  .next-day > h3{font-family:'IBM Plex Mono',monospace; font-size:11.5px; font-weight:600;
+    letter-spacing:.06em; color:var(--ink-2); margin:0 0 7px;}
+  .next-day > h3 .rel{color:var(--ink-3); font-weight:400; margin-left:6px;}
+  .game{background:var(--surface); padding:15px 14px 13px; box-shadow:0 0 0 1px var(--rule);}
   .game .where{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-3);
     letter-spacing:.04em;}
   .game .teams{font-size:15.5px; font-weight:600; margin:5px 0 12px; letter-spacing:-.01em;}
@@ -158,9 +164,9 @@
   </header>
 
   <section id="nextSection" class="next" hidden>
-    <h2 id="nextTitle">다음 경기</h2>
+    <h2 id="nextTitle">앞으로 일주일</h2>
     <p class="sub" id="nextSub"></p>
-    <div class="next-grid" id="nextGrid"></div>
+    <div id="nextDays"></div>
     <p class="note" id="nextNote"></p>
   </section>
 
@@ -462,41 +468,50 @@
     return diff === 0 ? '오늘' : diff === 1 ? '내일' : diff === 2 ? '모레' : null;
   }
 
+  function gameCard(g){
+    var pct = Math.round(g.prob * 100);
+    // 날씨는 모델에 안 들어간다. 표를 이미 쥔 사람을 위한 곁들이라 예보가 있을 때만 붙인다.
+    var wx = [];
+    if (g.temp != null) wx.push(g.temp + '도');
+    if (g.pop != null) wx.push('강수 ' + g.pop + '%');
+    return '<div class="game">' +
+      '<div class="where">' + esc(g.stadium) + ' · ' + esc(g.start) + '</div>' +
+      '<div class="teams">' + esc(g.away) + '<span class="at">vs</span>' + esc(g.home) + '</div>' +
+      '<div><span class="prob">' + pct + '%</span><span class="grade">' + esc(g.grade) + '</span></div>' +
+      '<div class="bar"><i style="width:' + pct + '%"></i></div>' +
+      '<div class="meta">예상 ' + fmt(g.expected) + ' / 좌석 ' + fmt(g.seats) + '<br>' +
+      '수요 ' + fmt(g.latent) + (wx.length ? ' · ' + wx.join(' ') : '') +
+      (g.note ? '<br><span class="cancel">' + esc(g.note) + '</span>' : '') +
+      '</div></div>';
+  }
+
   function renderNext(){
     var N = D.next;
     var host = document.getElementById('nextSection');
     // 시즌이 끝났거나 학습이 모자라면 섹션을 접는다. 빈 표를 남기지 않는다.
-    if(!N || !N.games || !N.games.length){ host.hidden = true; return; }
+    if(!N || !N.days || !N.days.length){ host.hidden = true; return; }
     host.hidden = false;
 
-    var rel = dayLabel(N.date);
+    var first = N.days[0].date, last = N.days[N.days.length - 1].date;
     document.getElementById('nextTitle').textContent =
-      N.date + (rel ? ' (' + rel + ')' : '') + ' 티켓 난이도';
+      (first === last ? first : first + ' ~ ' + last) + ' 티켓 난이도';
     document.getElementById('nextSub').textContent =
-      '그날 이전 ' + fmt(N.trainN) + '경기로 맞춘 검열 회귀가 낸 매진 확률이다. ' +
-      (N.weather && N.forecast
-        ? '기상청 단기예보를 ' + N.forecast + '경기에 반영했다.'
-        : '예보가 없어 날씨는 평년값으로 두었다.');
+      first + ' 이전 ' + fmt(N.trainN) + '경기로 맞춘 검열 회귀가 낸 매진 확률이다. ' +
+      '예매가 대체로 경기 일주일쯤 전에 열리므로 그 창 전체를 본다. 날씨는 쓰지 않았다. ' +
+      '비는 당일 관중을 분명히 깎지만 미리 팔리는 표는 거의 바꾸지 않기 때문이다.';
 
-    document.getElementById('nextGrid').innerHTML = N.games.map(function(g){
-      var pct = Math.round(g.prob * 100);
-      var wx = [];
-      if (g.temp != null) wx.push(g.temp + '도');
-      if (g.pop != null) wx.push('강수 ' + g.pop + '%');
-      return '<div class="game">' +
-        '<div class="where">' + esc(g.stadium) + ' · ' + esc(g.start) + '</div>' +
-        '<div class="teams">' + esc(g.away) + '<span class="at">vs</span>' + esc(g.home) + '</div>' +
-        '<div><span class="prob">' + pct + '%</span><span class="grade">' + esc(g.grade) + '</span></div>' +
-        '<div class="bar"><i style="width:' + pct + '%"></i></div>' +
-        '<div class="meta">예상 ' + fmt(g.expected) + ' / 좌석 ' + fmt(g.seats) + '<br>' +
-        '수요 ' + fmt(g.latent) + (wx.length ? ' · ' + wx.join(' ') : '') +
-        (g.note ? '<br><span class="cancel">' + esc(g.note) + '</span>' : '') +
-        '</div></div>';
+    document.getElementById('nextDays').innerHTML = N.days.map(function(day){
+      var rel = dayLabel(day.date);
+      return '<div class="next-day">' +
+        '<h3>' + esc(day.date) + ' ' + esc(day.dow) +
+        (rel ? '<span class="rel">' + rel + '</span>' : '') + '</h3>' +
+        '<div class="next-grid">' + day.games.map(gameCard).join('') + '</div>' +
+        '</div>';
     }).join('');
 
     document.getElementById('nextNote').textContent =
       '수요가 좌석을 넘는 만큼이 표 구하기의 어려움이다. 예상 관중은 좌석에서 잘린 뒤의 값이라 ' +
-      '매진이 가까울수록 수요와 벌어진다.';
+      '매진이 가까울수록 수요와 벌어진다. 먼 날일수록 순위와 연승이 그때까지 바뀌므로 확률이 흐려진다.';
   }
 
   // ---- 비 ----

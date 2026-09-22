@@ -95,13 +95,14 @@ def attach_forecast(games, span=3):
     return games, matched
 
 
-def upcoming(date):
-    """그 날짜의 경기를 순위, 구장 메타와 함께 조립한다."""
+def upcoming(dates):
+    """그 날짜(들)의 경기를 순위, 구장 메타와 함께 조립한다."""
     schedule = data("schedule.csv")
     standings = data("standings.csv")
     stadiums = data("stadiums.csv")
 
-    games = schedule[schedule["date"] == date].copy()
+    wanted = [dates] if isinstance(dates, str) else list(dates)
+    games = schedule[schedule["date"].isin(wanted)].copy()
     if games.empty:
         return games
 
@@ -130,23 +131,45 @@ def resolve_target(date=None):
     return (later[0], True) if later else (None, True)
 
 
-def predict_games(target, min_season="2023", weather=True, log=None):
-    """그 날짜 경기의 매진 확률과 예상 관중을 낸다.
+def upcoming_dates(days, start=None):
+    """오늘(또는 start)부터 days 일 안에 열리는 경기일을 이른 순으로 준다.
+
+    예매는 대체로 경기 일주일쯤 전에 열리므로, 표를 사려는 시점의 난이도를
+    보려면 다음 경기일 하나가 아니라 그 창 전체가 필요하다.
+    """
+    first = start or dt.date.today().isoformat()
+    last = (dt.date.fromisoformat(first) + dt.timedelta(days=days - 1)).isoformat()
+    schedule = data("schedule.csv")
+    return sorted(d for d in schedule["date"].unique() if first <= d <= last)
+
+
+def predict_games(target, min_season="2023", weather=False, log=None):
+    """그 날짜(들) 경기의 매진 확률과 예상 관중을 낸다.
+
+    target 은 날짜 하나이거나 날짜 목록이다. 목록이어도 학습은 한 번만 하고,
+    가장 이른 날짜를 기준으로 잘라 그 시점에 없던 결과가 섞이지 않게 한다.
 
     games 에 capacity, prob, expected, latent 를 붙여 돌려준다. 낼 수 없으면
     (None, 사유) 다. CLI 와 대시보드가 같은 함수를 쓰게 해서, 한쪽만 고쳐
     두 화면의 숫자가 갈리는 일이 없게 한다.
+
+    weather 는 기본으로 끈다. 완벽한 예보를 가정해도 매진 예측이 나아지지
+    않는다는 것을 analysis/lead_time.py 가 확인했다. 비는 관중을 분명히
+    깎지만 그 경로가 거의 당일 판매라서, 미리 팔리는 표를 설명하지 못한다.
     """
     def say(message):
         if log:
             log(message)
 
-    games = upcoming(target)
+    dates = [target] if isinstance(target, str) else sorted(target)
+    if not dates:
+        return None, {"reason": "예보할 날짜가 없다"}
+    games = upcoming(dates)
     if games.empty:
-        return None, {"reason": "%s 에 경기가 없다" % target}
+        return None, {"reason": "%s 에 경기가 없다" % ", ".join(dates)}
 
     train = model.load_dataset(min_season=min_season)
-    train = train[train["date"] < target]
+    train = train[train["date"] < dates[0]]
     if len(train) < 200:
         return None, {"reason": "학습할 경기가 %d개뿐이다" % len(train)}
 
@@ -156,10 +179,9 @@ def predict_games(target, min_season="2023", weather=True, log=None):
 
     # 그 시즌 그 구장의 상한. 아직 안 열린 경기라 관측값에서 직접 못 구한다.
     caps = train.groupby(["season", "stadium"])["capacity"].max()
-    season = games["season"].astype(str).iloc[0]
     games["capacity"] = [
-        caps.get((season, s), caps.get((str(int(season) - 1), s), np.nan))
-        for s in games["stadium"]
+        caps.get((str(se), st), caps.get((str(int(se) - 1), st), np.nan))
+        for se, st in zip(games["season"], games["stadium"])
     ]
     games = games[games["capacity"].notna()].copy()
     if games.empty:
@@ -196,44 +218,58 @@ def predict_games(target, min_season="2023", weather=True, log=None):
     games["prob"] = model.sellout_probability(fit, Xg.values, log_cap)
     games["expected"] = np.exp(model.expected_observed(fit, Xg.values, log_cap))
     games["latent"] = np.exp(model.latent_demand(fit, Xg.values))
-    games = games.sort_values("prob", ascending=False).reset_index(drop=True)
+    # 날짜가 먼저다. 하루 안에서만 어려운 순으로 본다.
+    games = games.sort_values(["date", "prob"], ascending=[True, False]).reset_index(drop=True)
 
-    return games, {"target": target, "train": len(train),
+    return games, {"target": dates[0], "dates": dates, "train": len(train),
                    "weather": bool(weather), "forecast": int(matched)}
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--date", help="예보할 날짜. 비우면 오늘, 오늘 경기가 없으면 다음 경기일")
-    ap.add_argument("--weather", action="store_true", help="날씨 변수를 함께 쓴다")
+    ap.add_argument("--days", type=int, default=1,
+                    help="그 날짜부터 며칠치를 볼지. 티켓이 열리는 시점까지 보려면 7")
+    ap.add_argument("--weather", action="store_true",
+                    help="날씨를 함께 쓴다. 매진 예측은 오히려 나빠진다 (lead_time.py 참고)")
     ap.add_argument("--min-season", default="2023")
     args = ap.parse_args()
 
     target, moved = resolve_target(args.date)
     if target is None:
         raise SystemExit("%s 이후 예정 경기가 없다." % (args.date or "오늘"))
-    if moved:
+    if moved and args.days <= 1:
         print("%s 에는 경기가 없어 다음 경기일 %s 로 본다." % (args.date or "오늘", target))
 
-    games, meta = predict_games(target, args.min_season, args.weather, log=print)
+    dates = target if args.days <= 1 else upcoming_dates(args.days, target)
+    games, meta = predict_games(dates, args.min_season, args.weather, log=print)
     if games is None:
         raise SystemExit(meta["reason"])
 
+    span = meta["dates"]
+    title = span[0] if len(span) == 1 else "%s ~ %s" % (span[0], span[-1])
     print()
-    print("%s 티켓 난이도  (학습 %d경기, %s 이전)" % (target, meta["train"], target))
+    print("%s 티켓 난이도  (학습 %d경기, %s 이전)" % (title, meta["train"], span[0]))
     print("-" * 78)
-    print("  %-5s %-4s %-11s %6s %7s %7s  %5s  %s"
-          % ("구장", "시각", "경기", "좌석", "예상", "잠재수요", "매진율", "난이도"))
-    for g in games.itertuples():
-        note = getattr(g, "note", "")
-        cancel = " [%s]" % note if isinstance(note, str) and note not in ("-", "") else ""
-        print("  %-5s %-5s %-4s vs %-4s %6d %7d %7d  %4.0f%%  %s%s"
-              % (g.stadium, g.start, g.away, g.home,
-                 g.capacity, g.expected, g.latent, g.prob * 100,
-                 grade(g.prob), cancel))
+    for date, day in games.groupby("date", sort=True):
+        if len(span) > 1:
+            print("  [%s %s]" % (date, day["dow"].iloc[0]))
+        print("  %-5s %-4s %-11s %6s %7s %7s  %5s  %s"
+              % ("구장", "시각", "경기", "좌석", "예상", "잠재수요", "매진율", "난이도"))
+        for g in day.itertuples():
+            note = getattr(g, "note", "")
+            cancel = " [%s]" % note if isinstance(note, str) and note not in ("-", "") else ""
+            print("  %-5s %-5s %-4s vs %-4s %6d %7d %7d  %4.0f%%  %s%s"
+                  % (g.stadium, g.start, g.away, g.home,
+                     g.capacity, g.expected, g.latent, g.prob * 100,
+                     grade(g.prob), cancel))
+        if len(span) > 1:
+            print()
     print("-" * 78)
     print("  예상은 좌석 제약까지 반영한 관중 수, 잠재수요는 제약이 없다면의 수요다.")
     print("  둘이 벌어질수록 표 구하기가 어렵다는 뜻이다.")
+    if len(span) > 1:
+        print("  먼 날일수록 순위와 연승이 그때까지 바뀌므로 확률이 흐려진다.")
 
 
 if __name__ == "__main__":

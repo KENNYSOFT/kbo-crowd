@@ -22,7 +22,7 @@ import pandas as pd
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import model
 from demand import team_effects
-from predict_today import grade, predict_games, resolve_target
+from predict_today import grade, predict_games, resolve_target, upcoming_dates
 from rain_price import rain_effect
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -80,57 +80,69 @@ def rain_summary(df):
     return {"shelter": shelter, "effects": effects, "timing": timing, "n": len(d)}
 
 
-def next_day(min_season):
-    """다음 경기일 예측. 화면 맨 위에 올릴 값이다.
+def forecast_display():
+    """화면에 곁들일 예보를 (구장, 날짜, 시각) 으로 찾을 수 있게 편다.
 
-    CLI 의 predict_today 와 같은 함수를 써서 두 화면의 숫자가 갈리지 않게 한다.
-    예정 경기가 없거나(시즌 종료) 학습이 부족하면 None 이고, 화면은 그 섹션을
-    통째로 접는다.
+    모델 입력이 아니라 읽는 사람을 위한 값이다. 날씨는 매진 예측을 나아지게
+    하지 않아서 모델에서 뺐지만(analysis/lead_time.py), 당일 관중은 분명히
+    깎으므로 표를 이미 쥔 사람에게는 여전히 볼 값이다. 단기예보라 앞 사흘만
+    차고 나머지는 빈다.
+    """
+    path = os.path.join(ROOT, "data", "forecast.csv")
+    if not os.path.exists(path):
+        return {}
+    fc = pd.read_csv(path, dtype={"hour": str})
+    return {(r.stadium, r.date, str(r.hour).zfill(2)): r for r in fc.itertuples()}
+
+
+def upcoming_week(min_season, days=7):
+    """앞으로 일주일치 예측. 화면 맨 위에 올릴 값이다.
+
+    다음 경기일 하나가 아니라 창 전체를 보는 것은 예매가 대체로 경기 일주일쯤
+    전에 열리기 때문이다. CLI 의 predict_today 와 같은 함수를 써서 두 화면의
+    숫자가 갈리지 않게 한다. 예정 경기가 없거나(시즌 종료) 학습이 부족하면
+    None 이고, 화면은 그 섹션을 통째로 접는다.
     """
     target, _moved = resolve_target()
     if target is None:
         return None
-    games, meta = predict_games(target, min_season=min_season, weather=True)
+    dates = upcoming_dates(days, target) or [target]
+    games, meta = predict_games(dates, min_season=min_season, weather=False)
     if games is None:
         return None
 
-    # 강수확률은 모델 피처가 아니라 읽는 사람을 위한 값이라 예보에서 직접 읽는다.
-    pop = {}
-    path = os.path.join(ROOT, "data", "forecast.csv")
-    if os.path.exists(path):
-        fc = pd.read_csv(path, dtype={"hour": str})
-        for r in fc.itertuples():
-            pop[(r.stadium, r.date, str(r.hour).zfill(2))] = r.rain_prob
+    at = forecast_display()
 
     def number(value, digits=1):
         return None if value is None or pd.isna(value) else round(float(value), digits)
 
-    rows = []
-    for g in games.itertuples():
-        hour = str(g.start)[:2]
-        note = getattr(g, "note", "")
-        rows.append({
-            "stadium": g.stadium,
-            "start": g.start,
-            "home": g.home,
-            "away": g.away,
-            "seats": int(g.capacity),
-            "expected": int(round(g.expected)),
-            "latent": int(round(g.latent)),
-            "prob": round(float(g.prob), 4),
-            "grade": grade(g.prob),
-            "temp": number(getattr(g, "temp", None)),
-            "rain": number(getattr(g, "rain_game", None)),
-            "pop": number(pop.get((g.stadium, g.date, hour)), 0),
-            "note": note if isinstance(note, str) and note not in ("-", "") else "",
-        })
+    grouped = []
+    for date, day in games.groupby("date", sort=True):
+        rows = []
+        for g in day.itertuples():
+            fc = at.get((g.stadium, g.date, str(g.start)[:2]))
+            note = getattr(g, "note", "")
+            rows.append({
+                "stadium": g.stadium,
+                "start": g.start,
+                "home": g.home,
+                "away": g.away,
+                "seats": int(g.capacity),
+                "expected": int(round(g.expected)),
+                "latent": int(round(g.latent)),
+                "prob": round(float(g.prob), 4),
+                "grade": grade(g.prob),
+                "temp": number(getattr(fc, "temp", None)) if fc is not None else None,
+                "pop": number(getattr(fc, "rain_prob", None), 0) if fc is not None else None,
+                "note": note if isinstance(note, str) and note not in ("-", "") else "",
+            })
+        grouped.append({"date": date, "dow": day["dow"].iloc[0], "games": rows})
 
     return {
-        "date": target,
-        "weather": meta["weather"],
-        "forecast": meta["forecast"],
+        "from": meta["dates"][0],
+        "to": meta["dates"][-1],
         "trainN": meta["train"],
-        "games": rows,
+        "days": grouped,
     }
 
 
@@ -177,7 +189,7 @@ def main():
     )
 
     payload = {
-        "next": next_day(args.min_season),
+        "next": upcoming_week(args.min_season),
         "rain": rain_summary(train),
         "generated": dt.datetime.now(dt.timezone(dt.timedelta(hours=9))).strftime("%Y-%m-%d %H:%M KST"),
         "lastGame": full["date"].max(),
