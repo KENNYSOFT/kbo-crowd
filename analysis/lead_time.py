@@ -7,10 +7,13 @@ python analysis/lead_time.py
 모르고, 순위와 연승은 일주일 사이에 바뀐다. 둘 중 무엇이 실제로 비싼지
 재는 것이 이 스크립트다.
 
-결과를 먼저 적어 두면, 비싼 쪽은 날씨가 아니라 리드타임이다. 비는 관중을
-분명히 깎지만 그 경로가 거의 당일 판매라서, 일주일 전에 팔리는 표는 날씨를
-보고 팔리는 것이 아니다. 그래서 완벽한 예보를 가정해도 매진 예측은 나아지지
-않는다. 근거는 아래 세 표에 있다.
+결과를 먼저 적어 두면 둘 다 비싸지 않다. 날씨는 완벽한 예보를 가정해도 매진
+예측을 나아지게 하지 않는다. 비는 관중을 분명히 깎지만 그 경로가 거의 당일
+판매라서, 일주일 전에 팔리는 표는 날씨를 보고 팔리는 것이 아니기 때문이다.
+리드타임도 생각보다 싸다. 일주일을 물러서도 브라이어가 0.1595 에서 0.1609 로
+오를 뿐인데, 순위가 그 사이 평균 0.7계단밖에 움직이지 않아서다. 연승은 2.9경기
+움직이지만 그 값을 평년으로 당겨 봐도 0.1603 으로 손댈 만한 차이가 아니다.
+그래서 티켓이 열리는 시점에 예보해도 당일 예보와 거의 같은 품질이 나온다.
 
 rain_price.py 와 목적이 다르다. 그쪽은 비가 수요를 얼마나 깎는지(인과)를
 재고, 여기서는 그 날씨를 알면 예측이 나아지는지를 잰다. 다른 질문이고
@@ -75,10 +78,14 @@ def as_of(df, history, days):
     for side in ["home", "away"]:
         asof = out[["d", side]].rename(columns={side: "team"}).copy()
         asof["cut"] = asof["d"] - pd.Timedelta(days=days)
+        # merge_asof 는 결과에 0부터 새 인덱스를 매긴다. 정렬해서 넘긴 순서가
+        # 그대로 남으므로 sort_index 로는 원래 행 순서를 되찾지 못하고, 그대로
+        # 쓰면 다른 경기의 순위가 붙는다. 자리 번호를 들고 갔다가 되돌린다.
+        asof["_row"] = np.arange(len(asof))
         merged = pd.merge_asof(
             asof.sort_values("cut"), history,
             left_on="cut", right_on="d", by="team", direction="backward",
-        ).sort_index()
+        ).sort_values("_row")
         for col in RANK_FEATURES:
             out["%s_%s" % (side, col)] = merged[col].values
     return out
