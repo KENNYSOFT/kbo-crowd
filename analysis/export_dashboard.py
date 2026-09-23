@@ -23,7 +23,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import model
 from backtest import summary, walk_forward
 from demand import team_effects
-from predict_today import grade, predict_games, upcoming_dates
+from predict_today import KST, grade, predict_games, today_kst, upcoming_dates
 from rain_price import BANDS, BAND_LABELS, rain_effect, scheduled_with_rain
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -170,7 +170,7 @@ def forecast_sections(min_season, lead=7, span=2):
     내므로 두 절의 숫자가 서로 어긋날 수 없다. 예정 경기가 없거나(시즌 종료)
     학습이 부족하면 None 이고, 화면은 그 절을 통째로 접는다.
     """
-    today = dt.date.today().isoformat()
+    today = today_kst().isoformat()
     dates = sorted(set(upcoming_dates(1, today) + upcoming_dates(span, today, lead=lead)))
     if not dates:
         return None
@@ -263,7 +263,7 @@ def main():
         "rain": rain_summary(train),
         "rainBands": rain_bands(args.min_season),
         "backtest": backtest_payload(args.min_season),
-        "generated": dt.datetime.now(dt.timezone(dt.timedelta(hours=9))).strftime("%Y-%m-%d %H:%M KST"),
+        "generated": dt.datetime.now(KST).strftime("%Y-%m-%d %H:%M KST"),
         "lastGame": full["date"].max(),
         "seasons": seasons,
         "teams": teams,

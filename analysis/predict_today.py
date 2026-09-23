@@ -22,6 +22,20 @@ import model
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+# 경기 일정이 한국 날짜라 '오늘' 도 한국 날짜여야 한다.
+KST = dt.timezone(dt.timedelta(hours=9))
+
+
+def today_kst():
+    """오늘을 한국 날짜로 준다.
+
+    dt.date.today() 는 실행하는 기계의 시간대를 따른다. Actions 러너는 UTC 라
+    한국 오전 9시 전에 돌면 아직 전날이고, 그러면 이미 끝난 어제 경기를 오늘
+    경기로 내놓고 예매 창도 하루 밀린다. 화면은 그대로 떠서 틀린 줄 모른다.
+    """
+    return dt.datetime.now(KST).date()
+
+
 GRADES = [
     (0.80, "매우 어려움"),
     (0.60, "어려움"),
@@ -123,7 +137,7 @@ def resolve_target(date=None):
 
     (날짜, 넘어갔는지) 를 돌려주고, 남은 경기가 없으면 (None, True).
     """
-    target = date or dt.date.today().isoformat()
+    target = date or today_kst().isoformat()
     if not upcoming(target).empty:
         return target, False
     schedule = data("schedule.csv")
@@ -138,7 +152,7 @@ def upcoming_dates(days, start=None, lead=0):
     사이 날짜는 이미 표가 풀려 있어 '지금 사야 하나' 를 묻는 자리가 아니므로,
     lead=7 로 창을 띄우면 지금 막 예매가 열리는 날짜만 남는다.
     """
-    base = dt.date.fromisoformat(start or dt.date.today().isoformat())
+    base = dt.date.fromisoformat(start) if start else today_kst()
     first = (base + dt.timedelta(days=lead)).isoformat()
     last = (base + dt.timedelta(days=lead + days - 1)).isoformat()
     schedule = data("schedule.csv")

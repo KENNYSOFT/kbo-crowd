@@ -154,15 +154,15 @@ def main():
     if not schedule:
         raise SystemExit("data/schedule.csv 가 없다. 먼저 fetch_schedule.py 를 실행할 것.")
 
+    today = kbo.today_kst()
     since = None
     if args.recent_days:
-        since = dt.date.today() - dt.timedelta(days=args.recent_days)
+        since = today - dt.timedelta(days=args.recent_days)
     elif args.since:
         since = dt.date.fromisoformat(args.since)
 
     # 지점별로 필요한 날짜를 모은다. 일정에는 아직 열리지 않은 경기도 있는데
     # 그 날의 관측은 존재하지 않으므로 요청하지 않는다.
-    today = dt.date.today()
     need = defaultdict(set)
     for r in schedule:
         stn = stn_of.get(r["stadium"])

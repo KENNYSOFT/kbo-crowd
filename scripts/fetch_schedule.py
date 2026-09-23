@@ -11,7 +11,6 @@ form 인코딩으로 요청해야 한다(JSON 으로 보내면 에러 페이지�
 """
 
 import argparse
-import datetime as dt
 import json
 import re
 import sys
@@ -116,7 +115,7 @@ def main():
     )
     args = ap.parse_args()
 
-    this_year = dt.date.today().year
+    this_year = kbo.today_kst().year
     if args.seasons:
         seasons = args.seasons
     elif args.current_only:

@@ -6,6 +6,7 @@ GitHub Actions 가 빠르고, 패키지 변화로 깨질 일도 없다.
 """
 
 import csv
+import datetime as dt
 import os
 import re
 import ssl
@@ -26,6 +27,24 @@ DATA_DIR = os.path.join(ROOT, "data")
 
 BASE = "https://www.koreabaseball.com"
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36"
+
+# 이 저장소의 날짜는 전부 한국 날짜다. 경기 일정도 기상청 발표시각도 KST 로 온다.
+KST = dt.timezone(dt.timedelta(hours=9))
+
+
+def now_kst():
+    """지금을 한국 시간으로 준다.
+
+    dt.datetime.now() 는 실행하는 기계의 시간대를 따른다. Actions 러너는 UTC 라
+    한국 새벽에 돌면 아직 전날이고, 그 시계로 기상청 발표를 고르면 반나절 전
+    발표본을 받는다. 없는 발표를 요청하지는 않으니 실패하지 않고 조용히 낡는다.
+    """
+    return dt.datetime.now(KST)
+
+
+def today_kst():
+    """오늘을 한국 날짜로 준다. 이유는 now_kst 와 같다."""
+    return now_kst().date()
 
 
 def mask_url(url):

@@ -122,7 +122,7 @@ def main():
     if not schedule:
         raise SystemExit("data/schedule.csv 가 없다. 먼저 fetch_schedule.py 를 실행할 것.")
 
-    today = dt.date.today()
+    today = kbo.today_kst()
     until = today + dt.timedelta(days=args.days)
     upcoming = {r["stadium"] for r in schedule
                 if today.isoformat() <= r["date"] <= until.isoformat()}
@@ -131,7 +131,7 @@ def main():
         kbo.write_csv(kbo.data_path("forecast.csv"), HEADER, [])
         return
 
-    base_date, base_time = latest_base(dt.datetime.now())
+    base_date, base_time = latest_base(kbo.now_kst())
     print("  발표 기준 %s %s / 대상 구장 %d곳" % (base_date, base_time, len(upcoming)))
 
     rows = []
