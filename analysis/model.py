@@ -15,6 +15,8 @@ Tobit 은 관측값을 두 종류로 나눠 우도를 쓴다. 매진이 아닌 �
 시즌마다 상한이 다르다. 그래서 관측별 검열점을 받도록 썼다.
 """
 
+import functools
+import os
 import sys
 
 import numpy as np
@@ -68,11 +70,26 @@ def season_curve(dates):
     return np.column_stack(cols)
 
 
+@functools.lru_cache(maxsize=1)
+def holidays():
+    """data/holidays.csv 의 공휴일 날짜와, 그 파일이 다루는 해를 준다.
+
+    목록은 손으로 관리한다. 대체공휴일과 임시공휴일, 선거일까지 들어 있어야 해서
+    규칙으로 만들 수 없다.
+    """
+    import pandas as pd
+
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    table = pd.read_csv(os.path.join(root, "data", "holidays.csv"), dtype=str)
+    dates = frozenset(table["date"])
+    return dates, frozenset(d[:4] for d in dates)
+
+
 def design_matrix(df, weather=False, reference=None):
     """설계행렬을 만든다.
 
     범주형은 더미로 펴되 기준 수준 하나를 뺀다(다중공선성 회피). 시즌 안의
-    시점은 date 열에서 season_curve 로 만든다.
+    시점은 date 열에서 season_curve 로 만들고, 평일 공휴일은 data/holidays.csv 로 가른다.
     reference 를 주면 학습 때 쓴 열 구성을 그대로 재현한다. 예측 시점에
     없는 범주가 있어도 열이 어긋나지 않게 하려는 것.
     """
@@ -91,6 +108,19 @@ def design_matrix(df, weather=False, reference=None):
     curve = season_curve(df["date"])
     for j in range(curve.shape[1]):
         cols["day_%d" % j] = curve[:, j]
+
+    # 평일 공휴일은 쉬는 날이라 같은 요일의 평소보다 훨씬 찬다. 요일 더미만으로는
+    # 선거일도 평범한 수요일이다. 주말 공휴일은 이미 쉬는 날이라 요일 더미가 맞게
+    # 보므로 표시하지 않는다. 표시하면 주말을 두 번 세어 매진을 크게 부풀린다.
+    # 목록에 없는 해의 경기를 평일로 보고 넘어가면 조용히 틀리므로 여기서 멈춘다.
+    holiday_dates, covered = holidays()
+    dates = df["date"].astype(str)
+    missing = sorted(set(dates.str[:4]) - covered)
+    if missing:
+        raise ValueError("data/holidays.csv 에 %s년이 없다. 그해 공휴일을 먼저 넣을 것."
+                         % ", ".join(missing))
+    weekday = pd.to_datetime(dates).dt.weekday < 5
+    cols["weekday_holiday"] = (dates.isin(holiday_dates) & weekday).astype(float)
 
     if weather:
         for name in ["temp", "rain_game", "rain_day", "humid", "wind", "cloud"]:
@@ -228,7 +258,6 @@ def load_dataset(path=None, min_season=None, drop_restricted=True):
     판정은 시즌 평균 점유율이 아니라 그 시즌 그 구장의 상한이 나중 시즌 대비
     얼마나 눌렸는지로 한다.
     """
-    import os
     import pandas as pd
 
     if path is None:

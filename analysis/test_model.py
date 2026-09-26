@@ -12,6 +12,7 @@ import os
 import sys
 
 import numpy as np
+import pandas as pd
 from scipy import optimize, stats
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -111,6 +112,26 @@ def test_season_curve_has_no_steps():
     plain = model.season_curve(["2025-08-31"])
     assert np.allclose(leap, plain), "윤년에 곡선이 하루 밀린다"
     print("  이계차분 최대 %.1e, 마지막 매듭 뒤 %.1e" % (bend, tail_bend))
+
+
+def test_holiday_flag():
+    """평일 공휴일만 가르는지, 목록에 없는 해에서는 멈추는지.
+
+    선거일(수)과 개천절 대체공휴일(월)은 표시하고, 토요일인 개천절과 평범한 금요일은
+    표시하지 않아야 한다. 주말 공휴일은 요일 더미가 이미 쉬는 날로 본다.
+    """
+    days = ["2026-06-03", "2026-10-05", "2026-10-03", "2026-10-02"]
+    got = list(model.design_matrix(pd.DataFrame({"date": days}))["weekday_holiday"])
+    assert got == [1.0, 1.0, 0.0, 0.0], "평일 공휴일을 가르지 못한다: %s" % got
+
+    # 목록에 없는 해를 평일로 보고 넘어가면 그해 공휴일 경기가 전부 조용히 틀린다.
+    try:
+        model.design_matrix(pd.DataFrame({"date": ["2031-05-05"]}))
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("목록에 없는 해인데 멈추지 않았다")
+    print("  평일 공휴일만 가르고, 목록에 없는 해에서 멈춘다")
 
 
 if __name__ == "__main__":
