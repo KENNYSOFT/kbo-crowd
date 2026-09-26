@@ -7,6 +7,7 @@ python analysis/test_model.py 로 실행한다.
 그래서 답을 아는 문제를 만들어 그 답을 되찾는지 본다.
 """
 
+import datetime as dt
 import os
 import sys
 
@@ -87,6 +88,29 @@ def test_no_censoring_matches_ols():
     gap = np.abs(fit["beta"] - ols).max()
     assert gap < 1e-3, "검열이 없는데 OLS 와 벌어진다: %.4f" % gap
     print("  무검열일 때 OLS 와 최대 차이 %.1e" % gap)
+
+
+def test_season_curve_has_no_steps():
+    """시즌 곡선이 날짜를 따라 매끈하게 변하는지. 월이 바뀌는 날에 계단이 없어야 한다.
+
+    계단이 있으면 그 날의 이계차분이 계단 크기만큼 튄다. 월 더미라면 1 이다.
+    """
+    days = [(dt.date(2026, 3, 20) + dt.timedelta(days=i)).isoformat() for i in range(215)]
+    B = model.season_curve(days)
+    bend = np.abs(np.diff(B, n=2, axis=0)).max()
+    assert bend < 1e-3, "곡선이 하루 사이에 꺾인다: %.2e" % bend
+
+    # 마지막 매듭 뒤로는 직선이라 10월 경기에서 곡선이 휘어 튀지 않는다.
+    last = (dt.date(2026, 3, 1) + dt.timedelta(days=model.SEASON_KNOTS[-1])).isoformat()
+    tail = B[[d > last for d in days]]
+    tail_bend = np.abs(np.diff(tail, n=2, axis=0)).max()
+    assert tail_bend < 1e-9, "마지막 매듭 뒤가 직선이 아니다: %.2e" % tail_bend
+
+    # 윤년이어도 같은 날짜는 같은 값이다. 3월 1일부터 세기 때문이다.
+    leap = model.season_curve(["2024-08-31"])
+    plain = model.season_curve(["2025-08-31"])
+    assert np.allclose(leap, plain), "윤년에 곡선이 하루 밀린다"
+    print("  이계차분 최대 %.1e, 마지막 매듭 뒤 %.1e" % (bend, tail_bend))
 
 
 if __name__ == "__main__":

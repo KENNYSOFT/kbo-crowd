@@ -128,7 +128,6 @@ def upcoming(dates):
         {"Mon": "월", "Tue": "화", "Wed": "수", "Thu": "목",
          "Fri": "금", "Sat": "토", "Sun": "일"}
     )
-    games["month"] = games["date"].str[5:7]
     return games
 
 
