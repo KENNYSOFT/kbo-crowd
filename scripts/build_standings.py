@@ -38,6 +38,10 @@ HEADER = [
     "season_progress",
 ]
 
+# 정규시즌 경기 수. 10개 구단이 144경기씩 치른다. 진행도의 분모를 결과가 난 경기
+# 수로 두면 진행 중인 시즌에서는 앞으로 열릴 경기가 5월이든 10월이든 1.0 이 된다.
+SEASON_GAMES = 10 * 144 // 2
+
 
 class Team:
     __slots__ = ("w", "l", "d", "streak", "recent")
@@ -114,7 +118,6 @@ def build(schedule_rows, season):
     for r in games:
         by_date[r["date"]].append(r)
 
-    total = sum(1 for r in games if has_result(r)) or len(games)
     teams = defaultdict(Team)
     played = 0
     out = []
@@ -145,7 +148,7 @@ def build(schedule_rows, season):
                     at.last10() if at.games else "",
                     at.games,
                     playoff_line_gb(teams, ranks, home) if ht.games else "",
-                    round(played / total, 3),
+                    round(played / SEASON_GAMES, 3),
                 ]
             )
 
