@@ -12,10 +12,13 @@ on:
         default: false
   push:
     branches: [main]
-    # 화면이나 모델이 바뀌면 데이터를 다시 받지 않고 다시 배포만 한다.
+    # 화면이나 모델, 분석 의존성이 바뀌면 데이터를 다시 받지 않고 다시 배포만 한다.
     paths:
       - "dashboard/**"
       - "analysis/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".python-version"
       - ".github/workflows/daily.yml"
 
 permissions:
@@ -37,10 +40,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      # 파이썬은 .python-version 이, 분석 의존성은 uv.lock 이 정한다. 여기서는 빈
+      # 가상환경만 만들어 뒤 단계의 python 이 그것을 가리키게 한다.
+      - uses: astral-sh/setup-uv@v7
         with:
-          python-version: "3.12"
-          cache: pip
+          activate-environment: true
+          cache-python: true
 
       # 수집 스크립트는 표준 라이브러리만 쓴다. 여기까지는 설치할 것이 없다.
       - name: 관중
@@ -102,8 +107,9 @@ jobs:
 
       # 여기부터는 대시보드를 만들어 Pages 로 올린다. 검열 회귀를 돌려야 해서
       # 이 단계에만 numpy 계열이 필요하다.
+      # 잠금 파일이 pyproject.toml 과 어긋나면 새로 풀지 않고 여기서 멈춘다.
       - name: 분석 의존성
-        run: pip install -r requirements.txt
+        run: uv sync --locked
 
       - name: 모델 회귀 테스트
         run: python analysis/test_model.py

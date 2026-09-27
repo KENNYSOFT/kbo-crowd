@@ -50,10 +50,10 @@ python scripts/fetch_forecast.py
 python scripts/build_dataset.py
 ```
 
-분석은 numpy, scipy, pandas 가 필요하다.
+분석은 numpy, scipy, pandas 가 필요하다. 설치는 [uv](https://docs.astral.sh/uv/) 로 한다. 파이썬 버전은 `.python-version` 이, 패키지 버전은 `uv.lock` 이 고정하므로 어느 PC 에서든 GitHub Actions 와 같은 환경이 만들어진다. `--locked` 를 붙이면 `pyproject.toml` 과 잠금 파일이 어긋났을 때 새로 풀지 않고 멈춘다.
 
 ```bash
-python -m venv .venv; .venv\Scripts\pip install -r requirements.txt
+uv sync --locked
 ```
 
 ```bash

@@ -1,0 +1,14 @@
+[project]
+name = "kbo-crowd"
+version = "0.1.0"
+description = "KBO 경기별 관중 기록에서 좌석 제약에 잘린 수요를 되찾는 분석"
+requires-python = ">=3.12"
+# 분석(analysis/) 전용이다. 수집 스크립트(scripts/)는 표준 라이브러리만 쓴다.
+dependencies = [
+    "numpy>=1.26",
+    "scipy>=1.11",
+    "pandas>=2.1",
+]
+
+[tool.uv]
+package = false
