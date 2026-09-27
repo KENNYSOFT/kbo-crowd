@@ -38,7 +38,7 @@ jobs:
       url: ${{ steps.deploy.outputs.page_url }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # 파이썬은 .python-version 이, 분석 의존성은 uv.lock 이 정한다. 여기서는 빈
       # 가상환경만 만들어 뒤 단계의 python 이 그것을 가리키게 한다.
@@ -117,13 +117,13 @@ jobs:
       - name: 대시보드 데이터 생성
         run: python analysis/export_dashboard.py
 
-      - uses: actions/configure-pages@v5
+      - uses: actions/configure-pages@v6
         with:
           enablement: true
 
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: dashboard
 
       - id: deploy
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
