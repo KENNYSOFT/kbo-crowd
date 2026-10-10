@@ -31,11 +31,33 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # KBO 홈페이지 이용약관 개정(2026-10-14 시행)이 자동 수집을 금지하는 조항을 넣었다.
+  # 그날부터는 어느 트리거로 돌아도 수집하지 않는다.
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      collect: ${{ steps.check.outputs.collect }}
+    steps:
+      - id: check
+        name: 수집 기한
+        run: |
+          if [[ "$(TZ=Asia/Seoul date +%F)" < "2026-10-14" ]]; then
+            echo "collect=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "collect=false" >> "$GITHUB_OUTPUT"
+          fi
+
   run:
+    needs: gate
+    # 수집을 멈춘 뒤의 정기 실행은 다시 배포할 것도 없으므로 통째로 건너뛴다.
+    if: github.event_name != 'schedule' || needs.gate.outputs.collect == 'true'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
+    env:
+      # push 는 수집 없이 다시 배포만 한다.
+      COLLECT: ${{ github.event_name != 'push' && needs.gate.outputs.collect == 'true' }}
 
     steps:
       - uses: actions/checkout@v7
@@ -49,11 +71,11 @@ jobs:
 
       # 수집 스크립트는 표준 라이브러리만 쓴다. 여기까지는 설치할 것이 없다.
       - name: 관중
-        if: github.event_name != 'push'
+        if: env.COLLECT == 'true'
         run: python scripts/fetch_crowd.py
 
       - name: 일정과 결과
-        if: github.event_name != 'push'
+        if: env.COLLECT == 'true'
         run: |
           if [ "${{ inputs.full }}" = "true" ]; then
             python scripts/fetch_schedule.py
@@ -62,12 +84,12 @@ jobs:
           fi
 
       - name: 순위와 연승
-        if: github.event_name != 'push'
+        if: env.COLLECT == 'true'
         run: python scripts/build_standings.py
 
       - name: 날씨
         # 키가 없거나 활용신청 전이면 여기서 멈추되 나머지는 그대로 간다.
-        if: github.event_name != 'push'
+        if: env.COLLECT == 'true'
         continue-on-error: true
         env:
           KMA_API_KEY: ${{ secrets.KMA_API_KEY }}
@@ -81,18 +103,18 @@ jobs:
       - name: 앞으로 열릴 경기의 예보
         # 예보는 발표마다 바뀌므로 커밋하지 않는다. 대시보드와 예측이 그날
         # 받은 것을 쓴다.
-        if: github.event_name != 'push'
+        if: env.COLLECT == 'true'
         continue-on-error: true
         env:
           KMA_API_KEY: ${{ secrets.KMA_API_KEY }}
         run: python scripts/fetch_forecast.py
 
       - name: 데이터셋 조립
-        if: github.event_name != 'push'
+        if: env.COLLECT == 'true'
         run: python scripts/build_dataset.py
 
       - name: 변경분 커밋
-        if: github.event_name != 'push'
+        if: env.COLLECT == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
